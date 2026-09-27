@@ -409,6 +409,61 @@ list. Keep the offer and CTA consistent across every format — only the
 tone and length should adapt.
 `.trim();
 
+// The three main functional categories of marketing email and their
+// specific types, mirrored from the client's EMAIL_CATEGORIES so the
+// server can validate what it's told rather than trusting it blindly.
+const EMAIL_CATEGORIES = {
+  "Promotional / Sales": [
+    "Product launch",
+    "Discount / flash sale",
+    "Cart abandonment recovery",
+    "New arrival announcement",
+    "Limited-time offer"
+  ],
+  "Relationship / Engagement": [
+    "Welcome email",
+    "Newsletter / update",
+    "Educational / how-to",
+    "Re-engagement / win-back",
+    "Survey / feedback request"
+  ],
+  "Transactional / Lifecycle": [
+    "Order confirmation",
+    "Renewal reminder",
+    "Milestone / anniversary",
+    "Account / billing notice",
+    "Onboarding step"
+  ]
+};
+
+// Builds an optional instruction line telling the model which
+// functional category/type the user picked from the dropdown, so
+// tone and structure match (a promotional email can push harder on
+// urgency than a calmer transactional or relationship email). Both
+// values are validated against EMAIL_CATEGORIES and silently dropped
+// if they don't match, since this only ever came from a <select> the
+// client fully controls, and a request could still forge the field.
+function buildEmailTypeInstruction(emailCategory, emailType) {
+  const validCategory = Object.prototype.hasOwnProperty.call(EMAIL_CATEGORIES, emailCategory)
+    ? emailCategory
+    : null;
+  const validType = validCategory && EMAIL_CATEGORIES[validCategory].includes(emailType)
+    ? emailType
+    : null;
+
+  if (!validCategory) return "";
+
+  const descriptor = validType ? `${validCategory} \u2192 ${validType}` : validCategory;
+
+  return `
+The user classified this email as: ${descriptor}. Match the tone, structure,
+and level of urgency to that category and type. A promotional/sales email
+can push harder on urgency and offer framing; a relationship/engagement
+email should read warmer and less salesy; a transactional/lifecycle email
+should read calm, clear, and informational rather than persuasive.
+`.trim();
+}
+
 function buildSequenceInstruction(length) {
   return `
 The user wants a ${length}-email marketing sequence, not a single email. Plan
@@ -909,6 +964,8 @@ module.exports = async function (req, res) {
     includeLandingPage,
     includeRepurpose,
     sequenceLength,
+    emailCategory,
+    emailType,
     webSearch,
     privateMode,
     voiceMode
@@ -1000,6 +1057,7 @@ module.exports = async function (req, res) {
       mode === "campaign" && includeLandingPage ? LANDING_PAGE_INSTRUCTION : "",
       mode === "campaign" && includeRepurpose ? REPURPOSE_INSTRUCTION : "",
       mode === "sequence" ? buildSequenceInstruction(clampedSequenceLength) : "",
+      isStructuredMode ? buildEmailTypeInstruction(emailCategory, emailType) : "",
       searchResults ? buildSearchContextBlock(searchResults) : "",
       isVoiceRequest ? VOICE_MODE_INSTRUCTION : ""
     ].filter(Boolean).join("\n\n");
