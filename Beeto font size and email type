@@ -1,0 +1,426 @@
+diff --git a/api/chat.js b/api/chat.js
+index ad1621d..0994be3 100644
+--- a/api/chat.js
++++ b/api/chat.js
+@@ -409,6 +409,61 @@ list. Keep the offer and CTA consistent across every format — only the
+ tone and length should adapt.
+ `.trim();
+ 
++// The three main functional categories of marketing email and their
++// specific types, mirrored from the client's EMAIL_CATEGORIES so the
++// server can validate what it's told rather than trusting it blindly.
++const EMAIL_CATEGORIES = {
++  "Promotional / Sales": [
++    "Product launch",
++    "Discount / flash sale",
++    "Cart abandonment recovery",
++    "New arrival announcement",
++    "Limited-time offer"
++  ],
++  "Relationship / Engagement": [
++    "Welcome email",
++    "Newsletter / update",
++    "Educational / how-to",
++    "Re-engagement / win-back",
++    "Survey / feedback request"
++  ],
++  "Transactional / Lifecycle": [
++    "Order confirmation",
++    "Renewal reminder",
++    "Milestone / anniversary",
++    "Account / billing notice",
++    "Onboarding step"
++  ]
++};
++
++// Builds an optional instruction line telling the model which
++// functional category/type the user picked from the dropdown, so
++// tone and structure match (a promotional email can push harder on
++// urgency than a calmer transactional or relationship email). Both
++// values are validated against EMAIL_CATEGORIES and silently dropped
++// if they don't match, since this only ever came from a <select> the
++// client fully controls, and a request could still forge the field.
++function buildEmailTypeInstruction(emailCategory, emailType) {
++  const validCategory = Object.prototype.hasOwnProperty.call(EMAIL_CATEGORIES, emailCategory)
++    ? emailCategory
++    : null;
++  const validType = validCategory && EMAIL_CATEGORIES[validCategory].includes(emailType)
++    ? emailType
++    : null;
++
++  if (!validCategory) return "";
++
++  const descriptor = validType ? `${validCategory} \u2192 ${validType}` : validCategory;
++
++  return `
++The user classified this email as: ${descriptor}. Match the tone, structure,
++and level of urgency to that category and type. A promotional/sales email
++can push harder on urgency and offer framing; a relationship/engagement
++email should read warmer and less salesy; a transactional/lifecycle email
++should read calm, clear, and informational rather than persuasive.
++`.trim();
++}
++
+ function buildSequenceInstruction(length) {
+   return `
+ The user wants a ${length}-email marketing sequence, not a single email. Plan
+@@ -909,6 +964,8 @@ module.exports = async function (req, res) {
+     includeLandingPage,
+     includeRepurpose,
+     sequenceLength,
++    emailCategory,
++    emailType,
+     webSearch,
+     privateMode,
+     voiceMode
+@@ -1000,6 +1057,7 @@ module.exports = async function (req, res) {
+       mode === "campaign" && includeLandingPage ? LANDING_PAGE_INSTRUCTION : "",
+       mode === "campaign" && includeRepurpose ? REPURPOSE_INSTRUCTION : "",
+       mode === "sequence" ? buildSequenceInstruction(clampedSequenceLength) : "",
++      isStructuredMode ? buildEmailTypeInstruction(emailCategory, emailType) : "",
+       searchResults ? buildSearchContextBlock(searchResults) : "",
+       isVoiceRequest ? VOICE_MODE_INSTRUCTION : ""
+     ].filter(Boolean).join("\n\n");
+diff --git a/index.html b/index.html
+index 72a34d3..aa0322c 100644
+--- a/index.html
++++ b/index.html
+@@ -614,6 +614,12 @@
+             <button type="button" class="sequence-length-btn" data-length="5">5 emails</button>
+           </div>
+ 
++          <div id="toolsEmailTypeRow" class="email-type-row hidden">
++            <label class="email-type-label" for="emailCategorySelect">Email type</label>
++            <select id="emailCategorySelect" class="email-type-select" aria-label="Email category"></select>
++            <select id="emailSubtypeSelect" class="email-type-select" aria-label="Email type" disabled></select>
++          </div>
++
+           <div class="tools-popup-divider"></div>
+ 
+           <button type="button" id="toolsWebSearchItem" class="tools-popup-item" aria-pressed="false">
+diff --git a/script.js b/script.js
+index fb091f3..8d683c0 100644
+--- a/script.js
++++ b/script.js
+@@ -103,6 +103,65 @@ let includeLandingPage = false;
+ let includeRepurpose = false;
+ let sequenceMode = false;
+ let sequenceLength = 3; // 3-5, adjustable via the tools popup stepper
++let emailCategory = ""; // one of EMAIL_CATEGORIES' keys, or "" for "let Beeto decide"
++let emailType = ""; // a specific type within emailCategory, or "" for "any type in this category"
++
++// --------------------------------------------------------------
++// Email taxonomy — the three main functional categories of
++// marketing email and the specific types within each. Surfaced as
++// a two-level dropdown (category -> type) in the tools popup for
++// campaign and sequence mode, and passed to the API so Beeto can
++// match tone/structure/urgency to what's actually being written.
++// --------------------------------------------------------------
++const EMAIL_CATEGORIES = {
++  "Promotional / Sales": [
++    "Product launch",
++    "Discount / flash sale",
++    "Cart abandonment recovery",
++    "New arrival announcement",
++    "Limited-time offer"
++  ],
++  "Relationship / Engagement": [
++    "Welcome email",
++    "Newsletter / update",
++    "Educational / how-to",
++    "Re-engagement / win-back",
++    "Survey / feedback request"
++  ],
++  "Transactional / Lifecycle": [
++    "Order confirmation",
++    "Renewal reminder",
++    "Milestone / anniversary",
++    "Account / billing notice",
++    "Onboarding step"
++  ]
++};
++
++// --------------------------------------------------------------
++// Font-size guidance — inbox-rendering norms per content piece.
++// These are fixed, well-established defaults (not something an AI
++// call should re-derive per request), so they live here as a
++// reference table. recommendBodyFontSize/recommendHeadlineFontSize
++// add a small adaptive touch based on the actual generated content.
++// --------------------------------------------------------------
++const FONT_SIZE_GUIDE = {
++  preheader: { min: 13, max: 14 },
++  headline: { min: 22, max: 28 },
++  ctaButton: { min: 16, max: 18 },
++  footer: { min: 11, max: 12 }
++};
++
++function recommendBodyFontSize(bodyText) {
++  const wordCount = (bodyText || "").trim().split(/\s+/).filter(Boolean).length;
++  // Longer, newsletter-style copy reads better a touch smaller with
++  // generous line-height; short punchy promo copy can run larger.
++  return wordCount > 220 ? 14 : 16;
++}
++
++function recommendHeadlineFontSize(headline) {
++  const len = (headline || "").length;
++  return len > 40 ? FONT_SIZE_GUIDE.headline.min : FONT_SIZE_GUIDE.headline.max;
++}
+ 
+ historySearchInput.addEventListener("input", () => {
+   historyFilter = historySearchInput.value.trim().toLowerCase();
+@@ -1061,6 +1120,9 @@ const toolsLandingItem = document.getElementById("toolsLandingItem");
+ const toolsRepurposeItem = document.getElementById("toolsRepurposeItem");
+ const toolsSequenceItem = document.getElementById("toolsSequenceItem");
+ const toolsSequenceLengthRow = document.getElementById("toolsSequenceLengthRow");
++const toolsEmailTypeRow = document.getElementById("toolsEmailTypeRow");
++const emailCategorySelect = document.getElementById("emailCategorySelect");
++const emailSubtypeSelect = document.getElementById("emailSubtypeSelect");
+ const toolsWebSearchItem = document.getElementById("toolsWebSearchItem");
+ const toolsPrivateItem = document.getElementById("toolsPrivateItem");
+ const privateModeBanner = document.getElementById("privateModeBanner");
+@@ -1106,6 +1168,11 @@ function renderToolsPopupState() {
+     btn.classList.toggle("active", Number(btn.dataset.length) === sequenceLength);
+   });
+ 
++  // Email type dropdown is available for both campaign and sequence
++  // mode — the category/type choice shapes tone the same way either
++  // way, whether it's one email or a whole drip flow.
++  toolsEmailTypeRow.classList.toggle("hidden", !(campaignMode || sequenceMode));
++
+   toolsWebSearchItem.classList.toggle("active", webSearchMode);
+   toolsWebSearchItem.setAttribute("aria-pressed", String(webSearchMode));
+ 
+@@ -1191,6 +1258,64 @@ toolsSequenceLengthRow.querySelectorAll(".sequence-length-btn").forEach((btn) =>
+   });
+ });
+ 
++// Populates the "type" dropdown from whichever category is selected.
++// Called on category change and once at startup to build the initial
++// category list from EMAIL_CATEGORIES.
++function populateEmailSubtypes() {
++  emailSubtypeSelect.innerHTML = "";
++
++  if (!emailCategory) {
++    emailSubtypeSelect.disabled = true;
++    const opt = document.createElement("option");
++    opt.value = "";
++    opt.textContent = "Select a category first";
++    emailSubtypeSelect.appendChild(opt);
++    return;
++  }
++
++  emailSubtypeSelect.disabled = false;
++  const placeholder = document.createElement("option");
++  placeholder.value = "";
++  placeholder.textContent = "Any type in this category";
++  emailSubtypeSelect.appendChild(placeholder);
++
++  (EMAIL_CATEGORIES[emailCategory] || []).forEach((type) => {
++    const opt = document.createElement("option");
++    opt.value = type;
++    opt.textContent = type;
++    emailSubtypeSelect.appendChild(opt);
++  });
++}
++
++// Builds the initial <option> list for the category select from
++// EMAIL_CATEGORIES, so the taxonomy only has to be maintained in one
++// place above.
++(function initEmailCategoryOptions() {
++  const placeholder = document.createElement("option");
++  placeholder.value = "";
++  placeholder.textContent = "Let Beeto decide";
++  emailCategorySelect.appendChild(placeholder);
++
++  Object.keys(EMAIL_CATEGORIES).forEach((category) => {
++    const opt = document.createElement("option");
++    opt.value = category;
++    opt.textContent = category;
++    emailCategorySelect.appendChild(opt);
++  });
++
++  populateEmailSubtypes();
++})();
++
++emailCategorySelect.addEventListener("change", () => {
++  emailCategory = emailCategorySelect.value;
++  emailType = "";
++  populateEmailSubtypes();
++});
++
++emailSubtypeSelect.addEventListener("change", () => {
++  emailType = emailSubtypeSelect.value;
++});
++
+ toolsWebSearchItem.addEventListener("click", () => {
+   webSearchMode = !webSearchMode;
+   renderToolsPopupState();
+@@ -1223,6 +1348,10 @@ function resetCampaignMode() {
+   includeRepurpose = false;
+   sequenceMode = false;
+   sequenceLength = 3;
++  emailCategory = "";
++  emailType = "";
++  emailCategorySelect.value = "";
++  populateEmailSubtypes();
+   userInput.placeholder = "Message Beeto…";
+   renderToolsPopupState();
+ }
+@@ -2916,6 +3045,8 @@ async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides, sign
+       includeLandingPage: mode === "campaign" ? landingFlag : undefined,
+       includeRepurpose: mode === "campaign" ? repurposeFlag : undefined,
+       sequenceLength: mode === "sequence" ? sequenceLength : undefined,
++      emailCategory: isStructuredMode ? (emailCategory || undefined) : undefined,
++      emailType: isStructuredMode ? (emailType || undefined) : undefined,
+       webSearch: isStructuredMode ? undefined : Boolean(useWebSearch),
+       privateMode: Boolean(isPrivateMode),
+       // Tells the server to answer in short, speakable sentences.
+@@ -3322,6 +3453,51 @@ function sequenceToText(sequence) {
+   return parts.join("\n");
+ }
+ 
++// Builds the "recommended font sizes" panel shown on a campaign card
++// or a single sequence email. Uses the fixed FONT_SIZE_GUIDE table
++// plus the two content-aware helpers for body/headline, rather than
++// asking the AI to invent numbers that should really stay consistent
++// email to email.
++function buildSizingGuideSection(email) {
++  const wrap = document.createElement("div");
++  wrap.className = "campaign-sizing-guide";
++
++  const label = document.createElement("div");
++  label.className = "campaign-label";
++  label.textContent = "Recommended font sizes";
++  wrap.appendChild(label);
++
++  const rows = [
++    ["Preheader", `${FONT_SIZE_GUIDE.preheader.min}\u2013${FONT_SIZE_GUIDE.preheader.max}px`],
++    ["Body text", `${recommendBodyFontSize(email.body)}px`],
++    ["CTA button", `${FONT_SIZE_GUIDE.ctaButton.min}\u2013${FONT_SIZE_GUIDE.ctaButton.max}px, bold`],
++    ["Footer / legal text", `${FONT_SIZE_GUIDE.footer.min}\u2013${FONT_SIZE_GUIDE.footer.max}px`]
++  ];
++
++  if (email.landing_page && email.landing_page.headline) {
++    rows.splice(1, 0, ["Landing page headline", `${recommendHeadlineFontSize(email.landing_page.headline)}px`]);
++  }
++
++  const list = document.createElement("ul");
++  list.className = "campaign-sizing-list";
++  rows.forEach(([field, size]) => {
++    const li = document.createElement("li");
++    const strong = document.createElement("strong");
++    strong.textContent = field + ": ";
++    li.appendChild(strong);
++    li.appendChild(document.createTextNode(size));
++    list.appendChild(li);
++  });
++  wrap.appendChild(list);
++
++  const hint = document.createElement("div");
++  hint.className = "campaign-sizing-hint";
++  hint.textContent = "Guideline only, actual rendering varies by inbox client.";
++  wrap.appendChild(hint);
++
++  return wrap;
++}
++
+ function addCampaignCardToDOM(campaign, warnings, aiDisclosure, messageIndex, isLast) {
+   const wrapper = document.createElement("div");
+   wrapper.className = "message assistant";
+@@ -3362,6 +3538,7 @@ function addCampaignCardToDOM(campaign, warnings, aiDisclosure, messageIndex, is
+   card.appendChild(campaignField("Preheader", campaign.preheader));
+   card.appendChild(campaignField("Body", campaign.body, true));
+   card.appendChild(campaignField("Call to action", campaign.cta_text));
++  card.appendChild(buildSizingGuideSection(campaign));
+ 
+   if (campaign.landing_page) {
+     const lp = campaign.landing_page;
+@@ -3616,6 +3793,7 @@ function addSequenceCardToDOM(sequence, warningsPerEmail, aiDisclosure) {
+     emailBody.appendChild(campaignField("Preheader", email.preheader));
+     emailBody.appendChild(campaignField("Body", email.body, true));
+     emailBody.appendChild(campaignField("Call to action", email.cta_text));
++    emailBody.appendChild(buildSizingGuideSection(email));
+ 
+     const emailWarnings = (warningsPerEmail && warningsPerEmail[i]) || [];
+     if (emailWarnings.length > 0) {
+diff --git a/style-additions.css b/style-additions.css
+index 81c781c..90a3751 100644
+--- a/style-additions.css
++++ b/style-additions.css
+@@ -43,3 +43,76 @@
+ .login-modal .login-box {
+   animation: loginFadeUp 0.4s ease both;
+ }
++
++/* ============= Email type dropdown (campaign + sequence mode) ============= */
++
++.email-type-row {
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++  padding: 2px 10px 8px 10px;
++}
++
++.email-type-label {
++  font-size: 11px;
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++  color: var(--gold);
++  font-weight: 700;
++}
++
++.email-type-select {
++  width: 100%;
++  background: var(--bg-main);
++  border: 1px solid var(--border);
++  color: var(--text);
++  border-radius: 6px;
++  padding: 7px 8px;
++  font-family: var(--font-body);
++  font-size: 12.5px;
++  cursor: pointer;
++}
++
++.email-type-select:hover {
++  border-color: var(--gold);
++}
++
++.email-type-select:disabled {
++  cursor: default;
++  opacity: 0.6;
++}
++
++/* ============= Recommended font-size panel (campaign/sequence cards) ============= */
++
++.campaign-sizing-guide {
++  background: rgba(201, 150, 46, 0.06);
++  border: 1px solid var(--border);
++  border-radius: 8px;
++  padding: 10px 12px;
++  display: flex;
++  flex-direction: column;
++  gap: 6px;
++}
++
++.campaign-sizing-list {
++  margin: 0;
++  padding-left: 16px;
++  display: flex;
++  flex-direction: column;
++  gap: 3px;
++}
++
++.campaign-sizing-list li {
++  font-size: 12.5px;
++  color: var(--text-soft);
++}
++
++.campaign-sizing-list li strong {
++  color: var(--text);
++}
++
++.campaign-sizing-hint {
++  font-size: 11px;
++  color: var(--text-soft);
++  font-style: italic;
++}
