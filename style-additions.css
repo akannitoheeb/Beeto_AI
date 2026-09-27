@@ -43,3 +43,76 @@
 .login-modal .login-box {
   animation: loginFadeUp 0.4s ease both;
 }
+
+/* ============= Email type dropdown (campaign + sequence mode) ============= */
+
+.email-type-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 10px 8px 10px;
+}
+
+.email-type-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gold);
+  font-weight: 700;
+}
+
+.email-type-select {
+  width: 100%;
+  background: var(--bg-main);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.email-type-select:hover {
+  border-color: var(--gold);
+}
+
+.email-type-select:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* ============= Recommended font-size panel (campaign/sequence cards) ============= */
+
+.campaign-sizing-guide {
+  background: rgba(201, 150, 46, 0.06);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.campaign-sizing-list {
+  margin: 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.campaign-sizing-list li {
+  font-size: 12.5px;
+  color: var(--text-soft);
+}
+
+.campaign-sizing-list li strong {
+  color: var(--text);
+}
+
+.campaign-sizing-hint {
+  font-size: 11px;
+  color: var(--text-soft);
+  font-style: italic;
+}
