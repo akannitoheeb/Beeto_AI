@@ -53,6 +53,7 @@ const CAMPAIGN_MESSAGE_WEIGHT = 2;
 const CAMPAIGN_LANDING_MESSAGE_WEIGHT = 3;
 const REPURPOSE_EXTRA_WEIGHT = 1;
 const SEQUENCE_MIN_LENGTH = 3;
+const { groqChatCompletion } = require("../lib/groqChatClient");
 const SEQUENCE_MAX_LENGTH = 5;
 
 // Only the most recent messages are sent to Groq. Sending the whole
@@ -1089,23 +1090,20 @@ module.exports = async function (req, res) {
           ? { max_completion_tokens: NORMAL_MAX_COMPLETION_TOKENS }
           : {});
 
-    const groqResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: usingTextModel ? TEXT_MODEL : VISION_MODEL,
-        messages: conversationMessages,
-        ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
-        ...voiceTuning,
-        ...(responseFormat ? { response_format: responseFormat } : {}),
-        ...(toolsForThisRequest ? { tools: toolsForThisRequest, tool_choice: "auto" } : {})
-      })
-    });
+  const { response: groqResponse, data: groqData, modelUsed } = await groqChatCompletion({
+  apiKey,
+  usingTextModel,
+  geminiApiKey: process.env.GEMINI_API_KEY,   // ← add this line
+  payload: {
+    messages: conversationMessages,
+    ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
+    ...voiceTuning,
+    ...(responseFormat ? { response_format: responseFormat } : {}),
+    ...(toolsForThisRequest ? { tools: toolsForThisRequest, tool_choice: "auto" } : {})
+  }
+});
 
-    let data = await groqResponse.json();
+let data = groqData;
 
     if (!groqResponse.ok) {
       console.error("Groq API error:", groqResponse.status, JSON.stringify(data));
@@ -1154,21 +1152,18 @@ module.exports = async function (req, res) {
         }
       }
 
-      const followUpResponse = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: usingTextModel ? TEXT_MODEL : VISION_MODEL,
-          messages: conversationMessages,
-          ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
-          ...voiceTuning
-        })
-      });
+  const { response: followUpResponse, data: followUpData } = await groqChatCompletion({
+  apiKey,
+  usingTextModel,
+  geminiApiKey: process.env.GEMINI_API_KEY,
+  payload: {
+    messages: conversationMessages,
+    ...(usingTextModel ? { reasoning_format: "hidden" } : {}),
+    ...voiceTuning
+  }
+});
 
-      data = await followUpResponse.json();
+data = followUpData;
 
       if (!followUpResponse.ok) {
         console.error("Groq API error (tool follow-up):", followUpResponse.status, JSON.stringify(data));
