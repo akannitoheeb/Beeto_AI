@@ -1739,6 +1739,16 @@ function updateAuthFormLabels() {
   authError.classList.add("hidden");
 }
 
+(function openAuthFromUrl() {
+  const p = new URLSearchParams(location.search);
+  if (p.has("login") || p.has("signup")) {
+    authMode = p.has("signup") ? "signup" : "login";
+    updateAuthFormLabels();
+    openAuthModal();
+    history.replaceState(null, "", location.pathname);
+  }
+})();
+
 // --------------------------------------------------------------
 // Show/hide password
 // --------------------------------------------------------------
@@ -1854,7 +1864,7 @@ googleAuthBtn.addEventListener("click", async () => {
   authError.classList.add("hidden");
   const { error } = await supabaseClient.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: window.location.origin }
+    options: { redirectTo: window.location.origin + "/app.html" }
   });
   if (error) {
     authError.textContent = friendlyAuthError(error.message);
@@ -1874,13 +1884,14 @@ function notifyBrevoSignup(email, name) {
   });
 }
 
-logoutBtn.addEventListener("click", () => {
+logoutBtn.addEventListener("click", async () => {
   closeAccountPopup();
   try {
     localStorage.removeItem(LAST_ACTIVE_KEY);
-    localStorage.removeItem(DRAFT_KEY); // don't leak an unsent draft into the next account on this device
+    localStorage.removeItem(DRAFT_KEY);
   } catch (error) {}
-  supabaseClient.auth.signOut();
+  await supabaseClient.auth.signOut();
+  location.replace("/");
 });
 
 // Fires on initial page load (restoring a saved session) AND
