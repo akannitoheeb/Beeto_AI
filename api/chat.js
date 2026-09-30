@@ -225,13 +225,18 @@ expertise with specific, actionable answers rather than generic tips.
 For everything else, just be a clear, direct, genuinely useful assistant.
 Keep answers reasonably concise unless the user asks for depth.
 
+Do not use markdown headings (# or ##) in normal chat replies. Use bold
+text or short paragraph breaks for emphasis and structure instead —
+headings make a chat reply look and read like a formatted document
+rather than a conversation.
+
 When a question involves math, always show real, correct step-by-step
 working using LaTeX math notation: wrap inline math in single dollar signs
 like $x^2 + 1$ and standalone/display equations in double dollar signs like
 $$\\frac{dy}{dx} = 2x$$. Never skip steps or fake a derivation — solve it
 properly, the way a math teacher would on a whiteboard.
 
-Do not use emoji by default — keep a mature, professional tone. Only use one
+Do not use emoji by default: keep a mature, professional tone. Only use one
 if the user's own message includes emoji, or in the rare moment a touch of
 humor or genuine sympathy calls for it.
 
@@ -393,7 +398,7 @@ The user wants a complete email marketing campaign. Fill subject_lines with
 `.trim();
 
 const LANDING_PAGE_INSTRUCTION = `
-Also design a matching landing page for this campaign — one the email's
+Also design a matching landing page for this campaign: one the email's
 CTA would link to. Write a headline, a supporting subheadline, 3-5 short
 page sections (each a short paragraph covering things like the offer,
 benefits, social proof, or FAQs), and a landing page CTA button text.
@@ -406,7 +411,7 @@ characters (report the actual character_count) that captures the core
 offer/CTA in a way that reads naturally as a text, not a shrunk email;
 (2) social captions for Instagram, LinkedIn, and X, each matching that
 platform's natural tone and length norms, plus a short relevant hashtag
-list. Keep the offer and CTA consistent across every format — only the
+list. Keep the offer and CTA consistent across every format, only the
 tone and length should adapt.
 `.trim();
 
@@ -470,7 +475,7 @@ function buildSequenceInstruction(length) {
 The user wants a ${length}-email marketing sequence, not a single email. Plan
 the arc across all ${length} emails so each has a distinct purpose (e.g.
 welcome/hook, value or education, social proof, objection handling,
-urgency/close) — don't repeat the same angle twice. Give each email a
+urgency/close), don't repeat the same angle twice. Give each email a
 send_delay relative to the previous one (e.g. "Immediately", "2 days
 later", "5 days later") that reflects realistic pacing for the campaign
 goal. Each email needs its own subject_lines, preheader, body, and
