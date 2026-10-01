@@ -44,6 +44,8 @@
 
 const TEXT_MODEL = "openai/gpt-oss-120b";
 const VISION_MODEL = "qwen/qwen3.6-27b";
+const { groqChatCompletion } = require("../lib/groqChatClient");
+const { callGemini } = require("../lib/geminiAdapter");
 
 const ALLOWED_ORIGIN = "https://beeto.toheebakanni.name.ng";
 const MAX_GUEST_MESSAGE_CHARS = 4000;
@@ -53,8 +55,8 @@ const CAMPAIGN_MESSAGE_WEIGHT = 2;
 const CAMPAIGN_LANDING_MESSAGE_WEIGHT = 3;
 const REPURPOSE_EXTRA_WEIGHT = 1;
 const SEQUENCE_MIN_LENGTH = 3;
-const { groqChatCompletion } = require("../lib/groqChatClient");
 const SEQUENCE_MAX_LENGTH = 5;
+
 
 // Only the most recent messages are sent to Groq. Sending the whole
 // chat every time is what burns through the per-minute token limit.
@@ -952,6 +954,75 @@ function getClientIp(req) {
   return req.socket?.remoteAddress || "unknown";
 }
 
+// Replaces images from older messages with a text note, so one image upload
+// doesn't force the slower vision models (and resend the image) for the next 10 messages.
+function stripOldImages(messages) {
+  return messages.map((msg, i) => {
+    if (i === messages.length - 1 || !Array.isArray(msg.content)) return msg;
+    if (!msg.content.some((p) => p.type === "image_url")) return msg;
+    const text = msg.content.find((p) => p.type === "text")?.text || "";
+    return { ...msg, content: text + "\n[An image was attached here earlier]" };
+  });
+}
+
+const isRetryable = (s) => s === 429 || s === 404 || s >= 500;
+
+function sseStart(res) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no"
+  });
+  if (res.flushHeaders) res.flushHeaders();
+}
+
+function sseSend(res, obj) {
+  res.write(`data: ${JSON.stringify(obj)}\n\n`);
+}
+
+// Streams Groq's reply, calling onDelta with each piece of text.
+// Returns { ok, status, data, text }. Never throws for HTTP errors.
+async function streamGroq(apiKey, payload, onDelta, clientSignal) {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify({ ...payload, model: TEXT_MODEL, stream: true }),
+    signal: AbortSignal.any([clientSignal, AbortSignal.timeout(45000)])
+  });
+
+  if (!response.ok) {
+    let data = {};
+    try { data = await response.json(); } catch {}
+    return { ok: false, status: response.status, data };
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let full = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const raw = trimmed.slice(5).trim();
+      if (raw === "[DONE]") return { ok: true, text: full };
+      try {
+        const piece = JSON.parse(raw).choices?.[0]?.delta?.content;
+        if (piece) { full += piece; onDelta(piece); }
+      } catch {}
+    }
+  }
+  return { ok: true, text: full };
+}
+
 // ---- Vercel handler format ----
 module.exports = async function (req, res) {
   if (req.method !== "POST") {
@@ -987,6 +1058,22 @@ module.exports = async function (req, res) {
   const user = authHeader ? await verifySupabaseToken(authHeader) : null;
   const planInfo = user ? await getUserPlanInfo(user.id) : { plan: "free", limit: null };
 
+  if (req.body?.extrasOnly) {
+    const extrasUser = await verifySupabaseToken(req.headers.authorization);
+    if (!extrasUser) return res.status(401).json({ error: "Login required." });
+    const extrasKey = process.env.GROQ_API_KEY;
+    const userText = String(req.body.userText || "").slice(0, 2000);
+    const assistantText = String(req.body.assistantText || "").slice(0, 4000);
+    const existing = Array.isArray(req.body.memories)
+      ? req.body.memories.slice(0, 50).map((m) => String(m).slice(0, 300))
+      : [];
+    const extras = await extractPostReplyExtras(extrasKey, userText, assistantText, existing);
+    return res.status(200).json({
+      memory: req.body.privateMode ? null : (extras?.memory ?? null),
+      suggestions: extras?.suggestions ?? []
+    });
+  }
+
   // Sequence mode and the landing-page/repurpose campaign add-ons are
   // Pro-only. This covers guests too, since planInfo.plan is "free"
   // whenever there's no logged-in user.
@@ -1006,10 +1093,19 @@ module.exports = async function (req, res) {
         code: "USER_LIMIT"
       });
     }
-  } else {
+    } else {
     if (totalMessageChars(messages) > MAX_GUEST_MESSAGE_CHARS) {
       return res.status(413).json({
         error: "That message is too long to try as a guest. Sign up for full access.",
+        code: "GUEST_LIMIT"
+      });
+    }
+
+    const ip = getClientIp(req);
+    const ipUsage = await checkAndIncrementKeyedUsage(ip, GUEST_DAILY_LIMIT);
+    if (ipUsage.blocked) {
+      return res.status(403).json({
+        error: "You've used your free message for today. Sign up or log in to keep chatting.",
         code: "GUEST_LIMIT"
       });
     }
@@ -1021,6 +1117,7 @@ module.exports = async function (req, res) {
         code: "GUEST_LIMIT"
       });
     }
+  }
 
     const ip = getClientIp(req);
     const usage = await checkAndIncrementKeyedUsage(ip, GUEST_DAILY_LIMIT);
@@ -1039,22 +1136,27 @@ module.exports = async function (req, res) {
       return res.status(500).json({ error: "Server is missing GROQ_API_KEY. Set it in Vercel's dashboard." });
     }
 
-    const recentMessages = trimHistory(messages);
+        const recentMessages = stripOldImages(trimHistory(messages));
     const usingTextModel = !conversationHasImage(recentMessages);
     const isStructuredMode = mode === "campaign" || mode === "sequence";
     const clampedSequenceLength = Math.min(Math.max(sequenceLength || SEQUENCE_MIN_LENGTH, SEQUENCE_MIN_LENGTH), SEQUENCE_MAX_LENGTH);
-
-    // Voice mode only applies to normal chat — structured campaign and
-    // sequence replies are JSON, never spoken.
     const isVoiceRequest = Boolean(voiceMode) && !isStructuredMode;
 
-    // Only search for normal chat — never for campaign/sequence mode,
-    // whose replies are structured JSON, not a place to splice search
-    // context into.
+    // Only offer send_email when the message clearly asks for it
+    // (an email address plus a word like send/email/mail).
+    const latestText = getLatestUserText(messages);
+    const wantsEmailSend = Boolean(user) && !isStructuredMode &&
+      /[^\s@]+@[^\s@]+\.[^\s@]+/.test(latestText) && /\b(send|email|mail)\b/i.test(latestText);
+    
+
+    const canStream = Boolean(stream) && !isStructuredMode && usingTextModel && !toolsForThisRequest && !isVoiceRequest;
+    if (canStream) sseStart(res);
+
     let searchResults = null;
     if (!isStructuredMode && webSearch) {
-      const query = getLatestUserText(messages);
-      searchResults = await performWebSearch(query);
+      if (canStream) sseSend(res, { type: "status", text: "Searching the web" });
+      searchResults = await performWebSearch(latestText);
+      if (canStream) sseSend(res, { type: "status", text: searchResults ? "Reading the results" : "Thinking" });
     }
 
     const systemContent = [
@@ -1075,25 +1177,63 @@ module.exports = async function (req, res) {
       responseFormat = buildSequenceSchema(clampedSequenceLength);
     }
 
-    // Tool use (send_email) is only offered in normal chat mode, and
-    // only to logged-in users — guests never get tool access, since
-    // an anonymous visitor triggering real outbound email is an abuse
-    // vector we don't want to open up.
-    const toolsForThisRequest = (!isStructuredMode && user) ? [EMAIL_TOOL] : undefined;
-
     const conversationMessages = [
       { role: "system", content: systemContent },
       ...recentMessages
     ];
 
-    // Voice replies: low reasoning effort (faster first word) and a
-    // capped length. Only applied to the text model; the vision model
-    // doesn't take these parameters.
     const voiceTuning = isVoiceRequest && usingTextModel
       ? { reasoning_effort: "low", max_completion_tokens: VOICE_MAX_COMPLETION_TOKENS }
       : (!isStructuredMode && usingTextModel
-          ? { max_completion_tokens: NORMAL_MAX_COMPLETION_TOKENS }
+          ? { reasoning_effort: "low", max_completion_tokens: NORMAL_MAX_COMPLETION_TOKENS }
           : {});
+
+    // ---------------- Streaming path ----------------
+    if (canStream) {
+      const controller = new AbortController();
+      res.on("close", () => controller.abort());
+
+      let sentAnything = false;
+      const onDelta = (text) => { sentAnything = true; sseSend(res, { type: "delta", text }); };
+
+      let result;
+      try {
+        result = await streamGroq(apiKey, { messages: conversationMessages, reasoning_format: "hidden", ...voiceTuning }, onDelta, controller.signal);
+      } catch (err) {
+        if (controller.signal.aborted) return; // the user pressed stop or left
+        result = { ok: false, status: 503, data: {} };
+      }
+
+      // Groq failed before sending a single word: fall back to Gemini.
+      if (!result.ok && !sentAnything && process.env.GEMINI_API_KEY && isRetryable(result.status)) {
+        sseSend(res, { type: "status", text: "Switching to a backup model" });
+        const g = await callGemini({
+          apiKey: process.env.GEMINI_API_KEY,
+          payload: { messages: conversationMessages, max_completion_tokens: NORMAL_MAX_COMPLETION_TOKENS }
+        });
+        const text = g.response.ok ? (g.data.choices?.[0]?.message?.content || "") : "";
+        if (text) { onDelta(text); result = { ok: true }; }
+      }
+
+      if (!result.ok) {
+        const busy = result.status === 429;
+        sseSend(res, {
+          type: "error",
+          error: busy
+            ? "Beeto is very busy right now. Please try again in a few seconds."
+            : "Beeto couldn't answer just now. Please try again.",
+          code: busy ? "RATE_LIMIT" : undefined
+        });
+        return res.end();
+      }
+
+      sseSend(res, {
+        type: "done",
+        sources: searchResults ? searchResults.map((r) => ({ title: r.title, url: r.url })) : []
+      });
+      return res.end();
+    }
+    // ---------------- end streaming path ----------------
 
   const { response: groqResponse, data: groqData, modelUsed } = await groqChatCompletion({
   apiKey,
@@ -1205,6 +1345,12 @@ data = followUpData;
       ? searchResults.map((r) => ({ title: r.title, url: r.url }))
       : [];
 
+  const {
+    messages, settings, mode, includeLandingPage, includeRepurpose,
+    sequenceLength, emailCategory, emailType, webSearch, privateMode, voiceMode,
+    stream
+  } = req.body || {};
+
     // Everyone gets suggestions (guests included); only logged-in,
     // non-private-mode users get memory extraction — guests have
     // nowhere persistent to store it, and private mode is explicitly
@@ -1227,6 +1373,9 @@ data = followUpData;
     return res.status(200).json({ reply, sources, memory, suggestions, toolResults: toolResultsForClient });
 
   } catch (error) {
+    if (res.headersSent) {
+      try { sseSend(res, { type: "error", error: "Something went wrong. Please try again." }); } catch {}
+      return res.end();
+    }
     return res.status(500).json({ error: "Server error: " + error.message });
   }
-};
