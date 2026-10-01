@@ -23,6 +23,13 @@ const ICONS = {
   cpu: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>`,
   activity: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
   send: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`
+  copy: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+  check: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  volume: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`,
+  stop: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`,
+  refresh: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>`,
+  thumbsUp: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></svg>`,
+  thumbsDown: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"/></svg>`,
 };
 
 // ============================================================
@@ -500,20 +507,64 @@ function speakWithBrowserVoice(plainText, onDone) {
   speakNext();
 }
 
-function toggleSpeak(text, btn) {
-  const wasThisOneSpeaking = btn.textContent === "Stop";
-  stopAllSpeech();
-  document.querySelectorAll(".message-actions .action-btn").forEach((b) => {
-    if (b.textContent === "Stop") b.textContent = "Listen";
-  });
-
-  if (wasThisOneSpeaking) return; // this button's own click was the "stop" tap
-
-  primeTtsAudioElement(); // synchronous, right inside this tap — required for Safari
-  btn.textContent = "Stop";
-  speakText(text, () => { btn.textContent = "Listen"; });
+function timeAgo(ts) {
+  if (!ts) return "";
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 45) return "just now";
+  const m = Math.max(1, Math.floor(s / 60));
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} hr ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d} day${d === 1 ? "" : "s"} ago`;
+  return new Date(ts).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
+function buildTimeEl(ts) {
+  if (!ts) return null;
+  const t = document.createElement("time");
+  t.className = "msg-time";
+  t.dataset.ts = ts;
+  t.textContent = timeAgo(ts);
+  t.title = new Date(ts).toLocaleString();
+  return t;
+}
+
+// Keeps every "x min ago" label fresh without re-rendering the chat.
+setInterval(() => {
+  document.querySelectorAll(".msg-time").forEach((el) => {
+    el.textContent = timeAgo(Number(el.dataset.ts));
+  });
+}, 30000);
+
+function makeIconBtn(iconKey, label, onClick, extraClass = "") {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "action-btn icon-only " + extraClass;
+  btn.innerHTML = ICONS[iconKey];
+  btn.title = label;
+  btn.setAttribute("aria-label", label);
+  btn.addEventListener("click", () => onClick(btn));
+  return btn;
+}
+
+function setListenBtnState(btn, speaking) {
+  btn.dataset.speaking = speaking ? "1" : "";
+  btn.innerHTML = speaking ? ICONS.stop : ICONS.volume;
+  btn.title = speaking ? "Stop" : "Listen";
+  btn.setAttribute("aria-label", btn.title);
+}
+
+function toggleSpeak(text, btn) {
+  const wasThisOneSpeaking = btn.dataset.speaking === "1";
+  stopAllSpeech();
+  document.querySelectorAll(".message-actions .listen-btn").forEach((b) => setListenBtnState(b, false));
+  if (wasThisOneSpeaking) return;
+
+  primeTtsAudioElement(); // must stay synchronous inside the tap for Safari
+  setListenBtnState(btn, true);
+  speakText(text, () => setListenBtnState(btn, false));
+}
 
 function populateVoiceOptions() {
   if (!("speechSynthesis" in window) || !voiceSelect) return;
@@ -2781,7 +2832,31 @@ function renderAttachmentPreview() {
 // --------------------------------------------------------------
 // Typing indicator (top-level function — not nested inside handleSend)
 // --------------------------------------------------------------
-function addTypingIndicator() {
+let statusTimer = null;
+
+function getStatusSteps(mode, useWebSearch, hasImage) {
+  if (mode === "campaign") return ["Understanding your brief", "Planning the campaign", "Writing the copy", "Checking deliverability"];
+  if (mode === "sequence") return ["Understanding your brief", "Planning the sequence", "Writing each email", "Checking deliverability"];
+  const steps = ["Thinking", "Understanding your question"];
+  if (hasImage) steps.push("Looking at your image");
+  if (useWebSearch) steps.push("Searching the web");
+  steps.push("Writing a reply");
+  return steps;
+}
+
+function stopStatusTimer() {
+  if (statusTimer) clearInterval(statusTimer);
+  statusTimer = null;
+}
+
+function removeTypingIndicator() {
+  stopStatusTimer();
+  const el = document.getElementById("typingIndicator");
+  if (el) el.remove();
+}
+
+function addTypingIndicator(steps = ["Thinking"]) {
+  stopStatusTimer();
   const wrapper = document.createElement("div");
   wrapper.className = "message assistant";
   wrapper.id = "typingIndicator";
@@ -2794,14 +2869,225 @@ function addTypingIndicator() {
   body.className = "message-body";
 
   const bubble = document.createElement("div");
-  bubble.className = "bubble typing-indicator";
-  bubble.innerHTML = `<span class="dot"></span><span class="dot"></span><span class="dot"></span>`;
+  bubble.className = "bubble status-indicator";
+  const label = document.createElement("span");
+  label.className = "status-shimmer";
+  label.textContent = steps[0] + "…";
+  bubble.appendChild(label);
 
   body.appendChild(bubble);
   wrapper.appendChild(avatar);
   wrapper.appendChild(body);
   chatLog.appendChild(wrapper);
   scrollChatToBottomIfNearBottom(true);
+
+  let i = 0;
+  statusTimer = setInterval(() => {
+    if (i < steps.length - 1) {
+      i++;
+      label.textContent = steps[i] + "…";
+    }
+  }, 2200);
+}
+
+// A real status from the server replaces the fake timer.
+function setTypingStatus(text) {
+  stopStatusTimer();
+  const label = document.querySelector("#typingIndicator .status-shimmer");
+  if (label) label.textContent = text + "…";
+}
+
+function addStreamingMessageToDOM() {
+  const wrapper = document.createElement("div");
+  wrapper.className = "message assistant";
+
+  const avatar = document.createElement("div");
+  avatar.className = "avatar";
+  avatar.innerHTML = ICONS.mail;
+
+  const body = document.createElement("div");
+  body.className = "message-body";
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble streaming";
+  body.appendChild(bubble);
+
+  wrapper.append(avatar, body);
+  chatLog.appendChild(wrapper);
+  chatLog.scrollTop = chatLog.scrollHeight;
+  return bubble;
+}
+
+// Drives the live bubble while a reply streams in.
+function createStreamUI(session) {
+  let bubble = null;
+  let text = "";
+  let queued = false;
+  let everStarted = false;
+
+  return {
+    handlers: {
+      onStatus: setTypingStatus,
+      onDelta(full) {
+        text = full;
+        if (getActiveSession() !== session) { bubble = null; return; } // user switched chats
+        if (!bubble || !bubble.isConnected) {
+          removeTypingIndicator();
+          bubble = addStreamingMessageToDOM();
+          everStarted = true;
+        }
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => {
+          queued = false;
+          if (!bubble || !bubble.isConnected) return;
+          const near = isChatNearBottom();
+          bubble.innerHTML = renderMarkdown(text);
+          if (near) chatLog.scrollTop = chatLog.scrollHeight;
+        });
+      }
+    },
+    get text() { return text; },
+    get started() { return everStarted; }
+  };
+}
+
+async function readReplyStream(response, handlers = {}) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let reply = "";
+  let sources = [];
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop();
+
+    for (const evt of events) {
+      const line = evt.trim();
+      if (!line.startsWith("data:")) continue;
+      let msg;
+      try { msg = JSON.parse(line.slice(5).trim()); } catch { continue; }
+
+      if (msg.type === "status") handlers.onStatus?.(msg.text);
+      else if (msg.type === "delta") { reply += msg.text; handlers.onDelta?.(reply); }
+      else if (msg.type === "done") sources = msg.sources || [];
+      else if (msg.type === "error") {
+        const err = new Error(msg.error || "Something went wrong.");
+        if (msg.code) err.code = msg.code;
+        throw err;
+      }
+    }
+  }
+
+  if (!reply.trim()) throw new Error("No text returned from the API.");
+  return { reply: reply.trim(), sources, memory: null, suggestions: [] };
+}
+
+async function retryLastReply() {
+  if (isSending) return;
+  const session = getActiveSession();
+  if (!session) return;
+  const last = session.messages[session.messages.length - 1];
+  if (!last || last.role !== "assistant" || last.kind) return; // normal replies only
+
+  const previous = session.messages.pop();
+  renderActiveChat();
+
+  isSending = true;
+  currentAbortController = new AbortController();
+  setLoading(true);
+  addTypingIndicator(getStatusSteps(undefined, webSearchMode, false));
+
+  const ui = createStreamUI(session);
+
+  try {
+    const result = await callGroqAPI(
+      session.messages, undefined, webSearchMode, undefined,
+      currentAbortController.signal, ui.handlers
+    );
+    session.messages.push({ role: "assistant", content: result.reply, sources: result.sources, createdAt: Date.now() });
+    saveUserData();
+    removeTypingIndicator();
+    renderActiveChat({ typeLast: !ui.started });
+    if (!isGuest) loadExtrasInBackground(session, getLatestUserTextFromSession(session), result.reply);
+  } catch (error) {
+    removeTypingIndicator();
+    if (error.name === "AbortError") {
+      if (ui.text.trim()) {
+        session.messages.push({ role: "assistant", content: ui.text.trim(), createdAt: Date.now() });
+      } else {
+        session.messages.push(previous); // nothing new was written: put the old reply back
+      }
+    } else {
+      session.messages.push({ role: "assistant", content: "⚠️ " + error.message, createdAt: Date.now() });
+    }
+    saveUserData();
+    renderActiveChat();
+  } finally {
+    stopStatusTimer();
+    setLoading(false);
+    isSending = false;
+    currentAbortController = null;
+  }
+}
+
+function getLatestUserTextFromSession(session) {
+  for (let i = session.messages.length - 1; i >= 0; i--) {
+    const m = session.messages[i];
+    if (m.role === "user") return m.displayText || (typeof m.content === "string" ? m.content : "");
+  }
+  return "";
+}
+
+// Fetches suggestion chips and memory AFTER the reply is already on screen.
+async function loadExtrasInBackground(session, userText, reply) {
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(CHAT_API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify({
+        extrasOnly: true,
+        userText,
+        assistantText: reply,
+        memories: (settings.memories || []).map((m) => m.text),
+        privateMode: Boolean(isPrivateMode)
+      })
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+
+    const lastMsg = session.messages[session.messages.length - 1];
+    if (!lastMsg || lastMsg.content !== reply) return; // user already moved on
+
+    if (data.memory && !isPrivateMode) {
+      const FREE_MEMORY_CAP = 10;
+      settings.memories = settings.memories || [];
+      if (isActivePro || settings.memories.length < FREE_MEMORY_CAP) {
+        settings.memories.push({ id: Date.now().toString(), text: data.memory, createdAt: new Date().toISOString() });
+      }
+    }
+
+    if (Array.isArray(data.suggestions) && data.suggestions.length) {
+      lastMsg.suggestions = data.suggestions;
+      // Append directly instead of re-rendering, so the reply isn't redrawn.
+      if (getActiveSession() === session && !isSending) {
+        const body = chatLog.querySelector(".message.assistant:last-child .message-body");
+        if (body && !body.querySelector(".suggestions-row")) {
+          const row = buildSuggestionsRow(data.suggestions);
+          const actions = body.querySelector(".message-actions");
+          actions ? body.insertBefore(row, actions) : body.appendChild(row);
+        }
+      }
+    }
+    saveUserData();
+  } catch (error) {
+    // suggestions and memory are nice-to-have, never break the chat for them
+  }
 }
 
 // --------------------------------------------------------------
@@ -3280,29 +3566,50 @@ function addMessageToDOM(msg, kind, animate = false, isLast = false) {
   if (kind === "assistant" && isLast && suggestions.length > 0 && !isSending) {
     body.appendChild(buildSuggestionsRow(suggestions));
   }
+  
+    if (kind === "user") {
+    const userTime = buildTimeEl(msg.createdAt);
+    if (userTime) { userTime.classList.add("user-time"); body.appendChild(userTime); }
+  }
 
-  if (kind === "assistant" && textPart) {
+    if (kind === "assistant" && textPart) {
     const actions = document.createElement("div");
     actions.className = "message-actions";
 
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "action-btn";
-    copyBtn.textContent = "Copy";
-    copyBtn.addEventListener("click", () => {
+    actions.appendChild(makeIconBtn("copy", "Copy", (btn) => {
       navigator.clipboard.writeText(textPart);
-      copyBtn.textContent = "Copied";
-      setTimeout(() => { copyBtn.textContent = "Copy"; }, 1200);
-    });
-
-    actions.appendChild(copyBtn);
+      btn.innerHTML = ICONS.check;
+      btn.title = "Copied";
+      setTimeout(() => { btn.innerHTML = ICONS.copy; btn.title = "Copy"; }, 1200);
+    }));
 
     if ("speechSynthesis" in window) {
-      const listenBtn = document.createElement("button");
-      listenBtn.className = "action-btn";
-      listenBtn.textContent = "Listen";
-      listenBtn.addEventListener("click", () => toggleSpeak(textPart, listenBtn));
+      const listenBtn = makeIconBtn("volume", "Listen", (btn) => toggleSpeak(textPart, btn), "listen-btn");
       actions.appendChild(listenBtn);
     }
+
+    if (isLast) {
+      actions.appendChild(makeIconBtn("refresh", "Retry", () => retryLastReply()));
+    }
+
+    const up = makeIconBtn("thumbsUp", "Good response", () => {
+      msg.feedback = msg.feedback === "up" ? null : "up";
+      up.classList.toggle("active", msg.feedback === "up");
+      down.classList.remove("active");
+      saveUserData();
+    });
+    const down = makeIconBtn("thumbsDown", "Bad response", () => {
+      msg.feedback = msg.feedback === "down" ? null : "down";
+      down.classList.toggle("active", msg.feedback === "down");
+      up.classList.remove("active");
+      saveUserData();
+    });
+    if (msg.feedback === "up") up.classList.add("active");
+    if (msg.feedback === "down") down.classList.add("active");
+    actions.append(up, down);
+
+    const timeEl = buildTimeEl(msg.createdAt);
+    if (timeEl) actions.appendChild(timeEl);
 
     body.appendChild(actions);
   }
