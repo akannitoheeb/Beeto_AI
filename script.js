@@ -3361,7 +3361,23 @@ async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides, sign
     return await readReplyStream(response, handlers);
   }
 
-  const data = await response.json();
+  // Safari can throw the unhelpful “The string did not match the expected pattern.”
+  // when response.json() receives an empty/non-JSON response. Read the body as
+  // text first so we can safely parse it and expose the real server error.
+  const rawResponse = await response.text();
+  let data = {};
+  if (rawResponse.trim()) {
+    try {
+      data = JSON.parse(rawResponse);
+    } catch (parseError) {
+      console.error("Beeto API returned non-JSON:", response.status, rawResponse.slice(0, 1000));
+      throw new Error(
+        response.ok
+          ? "Beeto returned an invalid response. Please try again."
+          : `Request failed with status ${response.status}: ${rawResponse.slice(0, 300)}`
+      );
+    }
+  }
 
   if (!response.ok) {
     const err = new Error(data.error || `Request failed with status ${response.status}`);
