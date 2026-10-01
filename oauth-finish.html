@@ -12,8 +12,17 @@
     const hash = window.location.hash.slice(1);
     const params = new URLSearchParams(hash);
 
-    if (params.get("error") === "no_email") {
+    const err = params.get("error");
+    if (err === "no_email") {
       statusMsg.textContent = "Couldn't read an email from that account. Try logging in a different way.";
+      return;
+    }
+    if (err === "login_not_supported") {
+      statusMsg.textContent = "Logging in with this provider isn't supported. Log in with email first, then connect it in Settings.";
+      return;
+    }
+    if (err || !params.get("data")) {
+      statusMsg.textContent = "Something went wrong. Please try again.";
       return;
     }
 
