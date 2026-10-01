@@ -22,7 +22,7 @@ const ICONS = {
   tag: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z"/><circle cx="7" cy="7" r="1"/></svg>`,
   cpu: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>`,
   activity: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
-  send: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`
+  send: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`,
   copy: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
   check: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
   volume: `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`,
@@ -3181,7 +3181,7 @@ async function handleSend(event) {
   }
 
   const session = getActiveSession();
-  session.messages.push({ role: "user", content, displayText: text, attachments: attachmentSummary });
+  session.messages.push({ role: "user", content, displayText: text, attachments: attachmentSummary, createdAt: Date.now() });
   saveUserData();
   renderSidebar();
   renderActiveChat();
@@ -3195,15 +3195,20 @@ async function handleSend(event) {
   isSending = true;
   currentAbortController = new AbortController();
   setLoading(true);
-  addTypingIndicator();
-  if (voiceModeEnabled) setVoiceStatus("thinking");
 
   const mode = campaignMode ? "campaign" : (sequenceMode ? "sequence" : undefined);
   const useWebSearch = webSearchMode;
+  addTypingIndicator(getStatusSteps(mode, useWebSearch, Array.isArray(content)));
+  if (voiceModeEnabled) setVoiceStatus("thinking");
   let voiceWillRespond = false; // set true once speakText() has been kicked off, so `finally` knows not to resume listening early
+  let streamUI = null;
 
   try {
-    const result = await callGroqAPI(session.messages, mode, useWebSearch, undefined, currentAbortController.signal);
+    streamUI = (!mode && !voiceModeEnabled) ? createStreamUI(session) : null;
+    const result = await callGroqAPI(
+      session.messages, mode, useWebSearch, undefined,
+      currentAbortController.signal, streamUI ? streamUI.handlers : undefined
+    );
 
     if (mode === "campaign") {
       session.messages.push({
@@ -3212,7 +3217,8 @@ async function handleSend(event) {
         campaignData: result.campaign,
         warnings: result.warnings,
         aiDisclosure: result.aiDisclosure,
-        kind: "campaign"
+        kind: "campaign",
+        createdAt: Date.now()
       });
 
       saveUserData();
@@ -3224,24 +3230,18 @@ async function handleSend(event) {
         sequenceData: result.sequence,
         warnings: result.warnings,
         aiDisclosure: result.aiDisclosure,
-        kind: "sequence"
+        kind: "sequence",
+        createdAt: Date.now()
       });
 
       saveUserData();
       renderActiveChat();
     } else {
-      session.messages.push({ role: "assistant", content: result.reply, sources: result.sources, suggestions: result.suggestions });
-
-      if (result.memory) {
-        settings.memories = settings.memories || [];
-        const FREE_MEMORY_CAP = 10;
-        if (isActivePro || settings.memories.length < FREE_MEMORY_CAP) {
-          settings.memories.push({ id: Date.now().toString(), text: result.memory, createdAt: new Date().toISOString() });
-        }
-      }
-
+      session.messages.push({ role: "assistant", content: result.reply, sources: result.sources, createdAt: Date.now() });
       saveUserData();
-      renderActiveChat({ typeLast: true });
+      removeTypingIndicator();
+      renderActiveChat({ typeLast: !(streamUI && streamUI.started) });
+      if (!isGuest && !voiceModeEnabled) loadExtrasInBackground(session, text, result.reply);
 
       if (voiceModeEnabled) {
         voiceWillRespond = true;
@@ -3267,11 +3267,14 @@ async function handleSend(event) {
   } catch (error) {
     console.error(error);
 
-    const typingIndicator = document.getElementById("typingIndicator");
-    if (typingIndicator) typingIndicator.remove();
+    removeTypingIndicator();
 
     if (error.name === "AbortError") {
-      // User hit stop — nothing more to do, the request is simply discarded.
+      if (streamUI && streamUI.text.trim()) {
+        session.messages.push({ role: "assistant", content: streamUI.text.trim(), createdAt: Date.now() });
+        saveUserData();
+      }
+      renderActiveChat();
     } else if (error.code === "GUEST_LIMIT") {
       session.messages.pop();
       renderActiveChat();
@@ -3281,10 +3284,11 @@ async function handleSend(event) {
       renderActiveChat();
       upgradeOverlay.classList.remove("hidden");
     } else {
-      session.messages.push({ role: "assistant", content: "⚠️ " + error.message });
+      session.messages.push({ role: "assistant", content: "⚠️ " + error.message, createdAt: Date.now() });
       renderActiveChat();
     }
   } finally {
+    stopStatusTimer();
     setLoading(false);
     resetCampaignMode();
     isSending = false;
@@ -3302,7 +3306,7 @@ async function handleSend(event) {
 // --------------------------------------------------------------
 // API call
 // --------------------------------------------------------------
-async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides, signal) {
+async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides, signal, handlers) {
   const authHeaders = await getAuthHeaders();
 
   const cleanMessages = messages.map((msg) => ({ role: msg.role, content: msg.content }));
@@ -3347,10 +3351,15 @@ async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides, sign
       webSearch: isStructuredMode ? undefined : Boolean(useWebSearch),
       privateMode: Boolean(isPrivateMode),
       // Tells the server to answer in short, speakable sentences.
-      voiceMode: !isStructuredMode && Boolean(voiceModeEnabled)
+      voiceMode: !isStructuredMode && Boolean(voiceModeEnabled),
+      stream: (!isStructuredMode && handlers && !voiceModeEnabled) ? true : undefined
     }),
     signal
   });
+
+  if (response.ok && (response.headers.get("content-type") || "").includes("text/event-stream")) {
+    return await readReplyStream(response, handlers);
+  }
 
   const data = await response.json();
 
