@@ -510,11 +510,11 @@ const EMAIL_TOOL = {
   type: "function",
   function: {
     name: "send_email",
-    description: "Send an email to a recipient via Brevo. Use this when the user explicitly asks you to send, email, or notify someone — not for drafting email copy they'll send themselves (that's normal chat, not this tool).",
+    description: "Send an email to the user's OWN account email address via Brevo. Use this only when the user explicitly asks you to email something to themselves (e.g. a draft or summary). It cannot send to anyone else. Not for drafting copy the user will send themselves.",
     parameters: {
       type: "object",
       properties: {
-        to: { type: "string", description: "Recipient email address" },
+        to: { type: "string", description: "The user's own account email address (any other address is rejected)" },
         subject: { type: "string", description: "Email subject line" },
         body: { type: "string", description: "Email body content, plain text (line breaks preserved)" }
       },
@@ -553,7 +553,7 @@ async function sendBrevoEmail({ to, subject, body }) {
         sender: { email: senderEmail, name: senderName },
         to: [{ email: to }],
         subject,
-        htmlContent: `<div style="white-space:pre-wrap;font-family:sans-serif;">${body.replace(/</g, "&lt;")}</div>`
+        htmlContent: `<div style="white-space:pre-wrap;font-family:sans-serif;">${body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div><p style="font-size:12px;color:#777;font-family:sans-serif;">Sent from Beeto at the request of your account. Beeto only emails your own address.</p>`
       })
     });
 
@@ -863,9 +863,38 @@ async function getUserPlanInfo(userId) {
   };
 }
 
+// Best-effort refund when the AI call fails after we've already charged.
+async function refundUsage(userId, weight) {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    await fetch(`${SUPABASE_URL}/rest/v1/rpc/refund_usage`, {
+      method: "POST",
+      headers: supabaseHeaders(),
+      body: JSON.stringify({ p_user_id: userId, p_weight: weight, p_today: today })
+    });
+  } catch (error) {
+    console.error("Usage refund failed:", error.message);
+  }
+}
+
 async function checkAndIncrementUsage(userId, limit, weight) {
   const today = new Date().toISOString().slice(0, 10);
   const headers = supabaseHeaders();
+
+  // Preferred path: one atomic SQL call (see db/usage-functions.sql), so
+  // parallel requests can't slip past the limit. Falls back to the older
+  // read-then-write logic below if the function isn't installed yet.
+  try {
+    const rpcRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/increment_usage`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ p_user_id: userId, p_limit: limit, p_weight: weight, p_today: today })
+    });
+    if (rpcRes.ok) {
+      const allowed = await rpcRes.json();
+      return { blocked: allowed !== true, atomic: true };
+    }
+  } catch {}
 
   const getRes = await fetch(
     `${SUPABASE_URL}/rest/v1/usage_limits?user_id=eq.${userId}&select=*`,
@@ -1077,6 +1106,17 @@ module.exports = async function (req, res) {
   if (req.body?.extrasOnly) {
     const extrasUser = await verifySupabaseToken(req.headers.authorization);
     if (!extrasUser) return res.status(401).json({ error: "Login required." });
+    // Meter this call too, otherwise it's a free, unlimited Groq endpoint.
+    try {
+      const extrasLimit = (planInfo.limit || FREE_DAILY_LIMIT) * 2;
+      const extrasUsage = await checkAndIncrementKeyedUsage(`extras:${extrasUser.id}`, extrasLimit);
+      if (extrasUsage.blocked) {
+        return res.status(200).json({ memory: null, suggestions: [] });
+      }
+    } catch (error) {
+      console.error("Extras usage check failed:", error);
+      return res.status(200).json({ memory: null, suggestions: [] });
+    }
     const extrasKey = process.env.GROQ_API_KEY;
     const userText = String(req.body.userText || "").slice(0, 2000);
     const assistantText = String(req.body.assistantText || "").slice(0, 4000);
@@ -1100,6 +1140,11 @@ module.exports = async function (req, res) {
     });
   }
 
+  let charged = false;
+  const refundIfCharged = async () => {
+    if (charged && user) { charged = false; await refundUsage(user.id, requestWeight); }
+  };
+
   try {
     if (user) {
       const limit = planInfo.limit;
@@ -1110,6 +1155,7 @@ module.exports = async function (req, res) {
         code: "USER_LIMIT"
       });
     }
+      charged = true;
       } else {
       if (totalMessageChars(messages) > MAX_GUEST_MESSAGE_CHARS) {
       return res.status(413).json({
@@ -1231,6 +1277,7 @@ module.exports = async function (req, res) {
       }
 
       if (!result.ok) {
+        await refundIfCharged();
         const busy = result.status === 429;
         sseSend(res, {
           type: "error",
@@ -1267,6 +1314,7 @@ let data = groqData;
 
     if (!groqResponse.ok) {
       console.error("Groq API error:", groqResponse.status, JSON.stringify(data));
+      await refundIfCharged();
       return sendGroqError(res, groqResponse.status, data);
     }
 
@@ -1292,7 +1340,12 @@ let data = groqData;
             args = {};
           }
 
-          const result = await sendBrevoEmail(args);
+          // Security: Beeto may only email the logged-in user's own address,
+          // so it can't be used as a spam/phishing relay from your domain.
+          const ownEmail = String(user?.email || "").toLowerCase();
+          const result = (ownEmail && String(args.to || "").trim().toLowerCase() === ownEmail)
+            ? await sendBrevoEmail(args)
+            : { ok: false, error: "For security, Beeto can only email your own account address." };
           toolResultsForClient.push({ tool: "send_email", ...result, to: args.to, subject: args.subject });
 
           conversationMessages.push({
@@ -1382,9 +1435,11 @@ data = followUpData;
     return res.status(200).json({ reply, sources, memory, suggestions, toolResults: toolResultsForClient });
 
   } catch (error) {
+    await refundIfCharged();
     if (res.headersSent) {
       try { sseSend(res, { type: "error", error: "Something went wrong. Please try again." }); } catch {}
       return res.end();
     }
     return res.status(500).json({ error: "Server error: " + error.message });
   }
+};
