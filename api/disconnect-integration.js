@@ -17,11 +17,11 @@ module.exports = async function (req, res) {
   if (!user) return res.status(401).json({ error: "Not logged in." });
 
   const { provider } = req.body || {};
-  if (!provider) return res.status(400).json({ error: "Missing provider." });
+  if (!["brevo", "mailchimp", "klaviyo"].includes(provider)) return res.status(400).json({ error: "Unknown provider." });
 
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
   await fetch(
-    `${SUPABASE_URL}/rest/v1/integrations?user_id=eq.${user.id}&provider=eq.${provider}`,
+    `${SUPABASE_URL}/rest/v1/integrations?user_id=eq.${user.id}&provider=eq.${encodeURIComponent(provider)}`,
     { method: "DELETE", headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
   );
 
