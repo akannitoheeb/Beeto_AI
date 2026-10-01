@@ -1,4 +1,8 @@
 const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
+const { decryptSecret } = require("../lib/secretBox");
+
+const ALLOWED_PROVIDERS = new Set(["brevo", "mailchimp", "klaviyo"]);
+const MAILCHIMP_DC_RE = /^[a-z]{2}\d+$/i;
 
 async function verifySupabaseToken(authHeader) {
   if (!authHeader) return null;
@@ -13,7 +17,7 @@ async function verifySupabaseToken(authHeader) {
 async function getUserIntegration(userId, provider) {
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
   const response = await fetch(
-    `${SUPABASE_URL}/rest/v1/integrations?user_id=eq.${userId}&provider=eq.${provider}&select=*`,
+    `${SUPABASE_URL}/rest/v1/integrations?user_id=eq.${userId}&provider=eq.${encodeURIComponent(provider)}&select=*`,
     { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
   );
   const rows = await response.json();
@@ -25,12 +29,13 @@ module.exports = async function (req, res) {
   if (!user) return res.status(401).json({ error: "Not logged in." });
 
   const provider = req.query.provider;
-  if (!provider) return res.status(400).json({ error: "Missing provider." });
+  if (!ALLOWED_PROVIDERS.has(provider)) return res.status(400).json({ error: "Unknown provider." });
 
   const integration = await getUserIntegration(user.id, provider);
   if (!integration) return res.status(400).json({ error: `${provider} isn't connected.` });
 
   try {
+    integration.access_token = decryptSecret(integration.access_token);
     let lists = [];
 
     if (provider === "brevo") {
@@ -41,6 +46,7 @@ module.exports = async function (req, res) {
       lists = (d.lists || []).map((l) => ({ id: l.id, name: l.name, count: l.totalSubscribers }));
     } else if (provider === "mailchimp") {
       const dc = integration.provider_account_id;
+      if (!MAILCHIMP_DC_RE.test(String(dc || ""))) throw new Error("Invalid Mailchimp datacenter.");
       const r = await fetch(`https://${dc}.api.mailchimp.com/3.0/lists?count=50`, {
         headers: { Authorization: `Bearer ${integration.access_token}` }
       });
