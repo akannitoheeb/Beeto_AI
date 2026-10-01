@@ -1035,18 +1035,19 @@ module.exports = async function (req, res) {
   }
 
   const {
-    messages,
-    settings,
-    mode,
-    includeLandingPage,
-    includeRepurpose,
-    sequenceLength,
-    emailCategory,
-    emailType,
-    webSearch,
-    privateMode,
-    voiceMode
-  } = req.body || {};
+  messages,
+  settings,
+  mode,
+  includeLandingPage,
+  includeRepurpose,
+  sequenceLength,
+  emailCategory,
+  emailType,
+  webSearch,
+  privateMode,
+  voiceMode,
+  stream
+} = req.body || {};
 
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: "No messages provided." });
@@ -1119,16 +1120,6 @@ module.exports = async function (req, res) {
     }
   }
 
-    const ip = getClientIp(req);
-    const usage = await checkAndIncrementKeyedUsage(ip, GUEST_DAILY_LIMIT);
-    if (usage.blocked) {
-      return res.status(403).json({
-        error: "You've used your free message for today. Sign up or log in to keep chatting.",
-        code: "GUEST_LIMIT"
-      });
-    }
-  }
-
   try {
     const apiKey = process.env.GROQ_API_KEY;
 
@@ -1147,7 +1138,8 @@ module.exports = async function (req, res) {
     const latestText = getLatestUserText(messages);
     const wantsEmailSend = Boolean(user) && !isStructuredMode &&
       /[^\s@]+@[^\s@]+\.[^\s@]+/.test(latestText) && /\b(send|email|mail)\b/i.test(latestText);
-    
+      
+    const toolsForThisRequest = wantsEmailSend ? [EMAIL_TOOL] : null;
 
     const canStream = Boolean(stream) && !isStructuredMode && usingTextModel && !toolsForThisRequest && !isVoiceRequest;
     if (canStream) sseStart(res);
@@ -1344,12 +1336,6 @@ data = followUpData;
     const sources = searchResults
       ? searchResults.map((r) => ({ title: r.title, url: r.url }))
       : [];
-
-  const {
-    messages, settings, mode, includeLandingPage, includeRepurpose,
-    sequenceLength, emailCategory, emailType, webSearch, privateMode, voiceMode,
-    stream
-  } = req.body || {};
 
     // Everyone gets suggestions (guests included); only logged-in,
     // non-private-mode users get memory extraction — guests have
