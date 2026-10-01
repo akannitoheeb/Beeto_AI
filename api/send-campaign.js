@@ -1,5 +1,10 @@
 const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
 const ALLOWED_ORIGIN = "https://beeto.toheebakanni.name.ng";
+const { decryptSecret } = require("../lib/secretBox");
+
+const ALLOWED_PROVIDERS = new Set(["brevo", "mailchimp", "klaviyo"]);
+const MAILCHIMP_DC_RE = /^[a-z]{2}\d+$/i;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function verifySupabaseToken(authHeader) {
   if (!authHeader) return null;
@@ -14,15 +19,28 @@ async function verifySupabaseToken(authHeader) {
 async function getUserIntegration(userId, provider) {
   const serviceKey = process.env.SUPABASE_SERVICE_KEY;
   const response = await fetch(
-    `${SUPABASE_URL}/rest/v1/integrations?user_id=eq.${userId}&provider=eq.${provider}&select=*`,
+    `${SUPABASE_URL}/rest/v1/integrations?user_id=eq.${userId}&provider=eq.${encodeURIComponent(provider)}&select=*`,
     { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } }
   );
   const rows = await response.json();
   return Array.isArray(rows) ? rows[0] : null;
 }
 
-function campaignHtmlBody(campaign) {
-  return `<div style="white-space:pre-wrap;font-family:sans-serif;line-height:1.5;">${(campaign.body || "").replace(/</g, "&lt;")}</div>`;
+function escapeHtml(text) {
+  return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Every bulk email needs an unsubscribe link (and a physical address for
+// CAN-SPAM). Each platform has its own merge tags for these.
+const FOOTERS = {
+  brevo: `<hr style="border:none;border-top:1px solid #ddd;margin:24px 0 12px;">
+<p style="font-size:12px;color:#777;font-family:sans-serif;">You are receiving this because you subscribed to our list. <a href="[UNSUBSCRIBE]">Unsubscribe</a></p>`,
+  mailchimp: `<hr style="border:none;border-top:1px solid #ddd;margin:24px 0 12px;">
+<p style="font-size:12px;color:#777;font-family:sans-serif;">*|LIST:ADDRESSLINE|*<br><a href="*|UNSUB|*">Unsubscribe</a></p>`
+};
+
+function campaignHtmlBody(campaign, provider) {
+  return `<div style="white-space:pre-wrap;font-family:sans-serif;line-height:1.5;">${escapeHtml(campaign.body)}</div>${FOOTERS[provider] || ""}`;
 }
 
 async function sendViaBrevo(integration, { campaign, listId, subjectLine, senderName, senderEmail }) {
@@ -33,7 +51,7 @@ async function sendViaBrevo(integration, { campaign, listId, subjectLine, sender
       name: subjectLine.slice(0, 60),
       subject: subjectLine,
       sender: { name: senderName || "Beeto", email: senderEmail },
-      htmlContent: campaignHtmlBody(campaign),
+      htmlContent: campaignHtmlBody(campaign, "brevo"),
       recipients: { listIds: [Number(listId)] }
     })
   });
@@ -51,7 +69,7 @@ async function sendViaBrevo(integration, { campaign, listId, subjectLine, sender
 
 async function sendViaMailchimp(integration, { campaign, listId, subjectLine, senderName, senderEmail }) {
   const dc = integration.provider_account_id; // Mailchimp's datacenter prefix, e.g. "us21"
-  if (!dc) throw new Error("Mailchimp connection is missing its datacenter info — reconnect Mailchimp.");
+  if (!dc || !MAILCHIMP_DC_RE.test(String(dc))) throw new Error("Mailchimp connection is missing or has invalid datacenter info. Reconnect Mailchimp.");
 
   const base = `https://${dc}.api.mailchimp.com/3.0`;
   const headers = { Authorization: `Bearer ${integration.access_token}`, "Content-Type": "application/json" };
@@ -68,11 +86,12 @@ async function sendViaMailchimp(integration, { campaign, listId, subjectLine, se
   const created = await createRes.json();
   if (!createRes.ok) throw new Error(created?.detail || "Mailchimp rejected the campaign.");
 
-  await fetch(`${base}/campaigns/${created.id}/content`, {
+  const contentRes = await fetch(`${base}/campaigns/${created.id}/content`, {
     method: "PUT",
     headers,
-    body: JSON.stringify({ html: campaignHtmlBody(campaign) })
+    body: JSON.stringify({ html: campaignHtmlBody(campaign, "mailchimp") })
   });
+  if (!contentRes.ok) throw new Error("Mailchimp campaign was created but its content couldn't be set. Check your Mailchimp dashboard.");
 
   const sendRes = await fetch(`${base}/campaigns/${created.id}/actions/send`, { method: "POST", headers });
   if (!sendRes.ok) throw new Error("Campaign created but couldn't send. Check your Mailchimp dashboard.");
@@ -100,11 +119,11 @@ module.exports = async function (req, res) {
 
   const { provider, campaign, listId, subjectLine, senderName, senderEmail } = req.body || {};
 
-  if (!provider) return res.status(400).json({ error: "No platform selected." });
+  if (!provider || !ALLOWED_PROVIDERS.has(provider)) return res.status(400).json({ error: "No valid platform selected." });
   if (!campaign || !campaign.body) return res.status(400).json({ error: "No campaign data provided." });
   if (!listId) return res.status(400).json({ error: "No list selected." });
   if (!subjectLine) return res.status(400).json({ error: "No subject line selected." });
-  if (!senderEmail) return res.status(400).json({ error: "No sender email set." });
+  if (!senderEmail || !EMAIL_RE.test(senderEmail)) return res.status(400).json({ error: "A valid sender email is required." });
 
   const integration = await getUserIntegration(user.id, provider);
   if (!integration) {
@@ -112,6 +131,7 @@ module.exports = async function (req, res) {
   }
 
   try {
+    integration.access_token = decryptSecret(integration.access_token);
     let result;
     if (provider === "brevo") result = await sendViaBrevo(integration, { campaign, listId, subjectLine, senderName, senderEmail });
     else if (provider === "mailchimp") result = await sendViaMailchimp(integration, { campaign, listId, subjectLine, senderName, senderEmail });
