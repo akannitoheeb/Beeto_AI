@@ -3352,7 +3352,7 @@ async function callGroqAPI(messages, mode, useWebSearch, campaignOverrides, sign
       privateMode: Boolean(isPrivateMode),
       // Tells the server to answer in short, speakable sentences.
       voiceMode: !isStructuredMode && Boolean(voiceModeEnabled),
-      stream: (!isStructuredMode && handlers && !voiceModeEnabled) ? true : undefined
+      stream: undefined
     }),
     signal
   });
