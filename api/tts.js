@@ -44,6 +44,50 @@ async function verifySupabaseToken(authHeader) {
   return response.json();
 }
 
+// Per-user daily cap so one account can't drain ElevenLabs credits.
+// Uses the existing ip_usage_limits table with a "tts:<user id>" key.
+const TTS_DAILY_LIMIT = 60;
+
+function supabaseServiceHeaders() {
+  const serviceKey = process.env.SUPABASE_SERVICE_KEY;
+  return {
+    "Content-Type": "application/json",
+    "apikey": serviceKey,
+    "Authorization": `Bearer ${serviceKey}`,
+    "Prefer": "return=representation"
+  };
+}
+
+async function checkAndIncrementTtsUsage(userId) {
+  const key = encodeURIComponent(`tts:${userId}`);
+  const today = new Date().toISOString().slice(0, 10);
+  const headers = supabaseServiceHeaders();
+
+  const getRes = await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${key}&select=*`, { headers });
+  const rows = await getRes.json();
+  const row = Array.isArray(rows) ? rows[0] : null;
+
+  if (!row) {
+    await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits`, {
+      method: "POST", headers,
+      body: JSON.stringify({ ip_address: `tts:${userId}`, message_count: 1, reset_date: today })
+    });
+    return { blocked: false };
+  }
+  if (row.reset_date !== today) {
+    await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${key}`, {
+      method: "PATCH", headers, body: JSON.stringify({ message_count: 1, reset_date: today })
+    });
+    return { blocked: false };
+  }
+  if (row.message_count >= TTS_DAILY_LIMIT) return { blocked: true };
+
+  await fetch(`${SUPABASE_URL}/rest/v1/ip_usage_limits?ip_address=eq.${key}`, {
+    method: "PATCH", headers, body: JSON.stringify({ message_count: row.message_count + 1 })
+  });
+  return { blocked: false };
+}
+
 // Cuts long text at the last sentence end before the limit, so the
 // audio doesn't stop mid-word.
 function trimToSentence(text, max) {
@@ -68,6 +112,16 @@ module.exports = async function (req, res) {
     // Client-side, this 401 is expected for guests — it's what
     // triggers the fallback to the browser's own voice.
     return res.status(401).json({ error: "Sign in to use Beeto's voice." });
+  }
+
+  try {
+    const usage = await checkAndIncrementTtsUsage(user.id);
+    if (usage.blocked) {
+      return res.status(429).json({ error: "Daily voice limit reached. Beeto will use your browser's voice instead." });
+    }
+  } catch (error) {
+    console.error("TTS usage check failed:", error.message);
+    return res.status(503).json({ error: "Voice service temporarily unavailable." });
   }
 
   const apiKey = process.env.ELEVENLABS_API_KEY;
