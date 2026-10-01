@@ -1055,9 +1055,24 @@ module.exports = async function (req, res) {
 
   const requestWeight = getRequestWeight(mode, { includeLandingPage, includeRepurpose, sequenceLength });
 
-  const authHeader = req.headers.authorization;
-  const user = authHeader ? await verifySupabaseToken(authHeader) : null;
-  const planInfo = user ? await getUserPlanInfo(user.id) : { plan: "free", limit: null };
+  // Auth/usage checks talk to Supabase before the main AI try/catch.
+  // If Supabase ever returns a malformed response or is temporarily
+  // unreachable, do not let that crash the entire Vercel function with
+  // FUNCTION_INVOCATION_FAILED. Return a useful 503 instead.
+  let user = null;
+  let planInfo = { plan: "free", limit: null };
+
+  try {
+    const authHeader = req.headers.authorization;
+    user = authHeader ? await verifySupabaseToken(authHeader) : null;
+    planInfo = user ? await getUserPlanInfo(user.id) : { plan: "free", limit: null };
+  } catch (error) {
+    console.error("Supabase auth/plan check failed:", error);
+    return res.status(503).json({
+      error: "Beeto's account service is temporarily unavailable. Please try again in a moment.",
+      code: "AUTH_SERVICE_UNAVAILABLE"
+    });
+  }
 
   if (req.body?.extrasOnly) {
     const extrasUser = await verifySupabaseToken(req.headers.authorization);
@@ -1085,17 +1100,18 @@ module.exports = async function (req, res) {
     });
   }
 
-  if (user) {
-    const limit = planInfo.limit;
-    const usage = await checkAndIncrementUsage(user.id, limit, requestWeight);
-    if (usage.blocked) {
+  try {
+    if (user) {
+      const limit = planInfo.limit;
+      const usage = await checkAndIncrementUsage(user.id, limit, requestWeight);
+      if (usage.blocked) {
       return res.status(429).json({
         error: `You've reached today's limit of ${limit} messages. Resets at midnight.${limit === FREE_DAILY_LIMIT ? " Upgrade to Pro for a higher limit." : ""}${mode === "campaign" || mode === "sequence" ? " Campaigns and sequences count as more than one message since they generate more content." : ""}`,
         code: "USER_LIMIT"
       });
     }
-    } else {
-    if (totalMessageChars(messages) > MAX_GUEST_MESSAGE_CHARS) {
+      } else {
+      if (totalMessageChars(messages) > MAX_GUEST_MESSAGE_CHARS) {
       return res.status(413).json({
         error: "That message is too long to try as a guest. Sign up for full access.",
         code: "GUEST_LIMIT"
@@ -1117,7 +1133,14 @@ module.exports = async function (req, res) {
         error: "Guest access is temporarily paused for today. Please sign up or log in to keep chatting.",
         code: "GUEST_LIMIT"
       });
+      }
     }
+  } catch (error) {
+    console.error("Usage-limit check failed:", error);
+    return res.status(503).json({
+      error: "Beeto's usage service is temporarily unavailable. Please try again in a moment.",
+      code: "USAGE_SERVICE_UNAVAILABLE"
+    });
   }
 
   try {
