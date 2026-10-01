@@ -45,9 +45,10 @@ async function getMailchimpIdentity(accessToken) {
   });
   if (!response.ok) throw new Error("Could not read Mailchimp account info.");
   const data = await response.json();
+  const dc = typeof data.dc === "string" && /^[a-z]{2}\d+$/i.test(data.dc) ? data.dc : null;
   return {
     email: data.login?.email || null,
-    dc: data.dc || null
+    dc
   };
 }
 
@@ -71,15 +72,38 @@ async function getKlaviyoIdentity(accessToken) {
   };
 }
 
+function readCookie(req, name) {
+  const header = req.headers.cookie || "";
+  for (const part of header.split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === name) return v.join("=");
+  }
+  return null;
+}
+
 module.exports = async function (req, res) {
   const { code, state } = req.query;
   if (!code || !state) return res.status(400).send("Missing code or state.");
 
-  let provider, mode;
+  let provider, mode, nonce;
   try {
-    ({ provider, mode } = JSON.parse(Buffer.from(state, "base64url").toString()));
+    ({ provider, mode, nonce } = JSON.parse(Buffer.from(state, "base64url").toString()));
   } catch {
     return res.status(400).send("Invalid state.");
+  }
+
+  // CSRF protection: the nonce in state must match the cookie set by oauth-start.
+  const cookieNonce = readCookie(req, "beeto_oauth_nonce");
+  res.setHeader("Set-Cookie", "beeto_oauth_nonce=; Path=/api; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+  if (!nonce || !cookieNonce || nonce !== cookieNonce) {
+    return res.status(400).send("Invalid or expired login attempt. Please start again.");
+  }
+  if (!TOKEN_ENDPOINTS[provider] || (mode !== "login" && mode !== "connect")) {
+    return res.status(400).send("Invalid state.");
+  }
+  // Klaviyo's sender email is not a verified identity: never allow it to log in.
+  if (mode === "login" && provider !== "mailchimp") {
+    return res.redirect(`${process.env.OAUTH_REDIRECT_BASE}/oauth-finish.html#error=login_not_supported&provider=${provider}`);
   }
 
   const redirectUri = `${process.env.OAUTH_REDIRECT_BASE}/api/oauth-callback`;
@@ -104,11 +128,9 @@ module.exports = async function (req, res) {
 
       // Find-or-create the Supabase user by email, then generate a
       // magic-link token the browser can redeem to actually log in.
-      const listRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users?email=${encodeURIComponent(identity.email)}`, {
-        headers: supabaseHeaders()
-      });
-      const listData = await listRes.json();
-      let userExists = Array.isArray(listData.users) && listData.users.length > 0;
+      // generate_link below creates the user if missing, so we only need to
+      // make sure the email is confirmed; no list lookup required.
+      let userExists = false;
 
       if (!userExists) {
         const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
@@ -116,7 +138,8 @@ module.exports = async function (req, res) {
           headers: supabaseHeaders(),
           body: JSON.stringify({ email: identity.email, email_confirm: true })
         });
-        if (!createRes.ok) throw new Error("Could not create account.");
+        // 422 = user already exists, which is fine: we just want a login link.
+        if (!createRes.ok && createRes.status !== 422) throw new Error("Could not create account.");
       }
 
       const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
@@ -136,7 +159,7 @@ module.exports = async function (req, res) {
         refresh_token: tokenData.refresh_token || null,
         expires_at: expiresAt,
         provider_account_id: identity.dc,
-        needs_confirm: provider === "klaviyo" // Klaviyo email is best-effort, ask before trusting it
+        needs_confirm: false
       })).toString("base64url");
 
       return res.redirect(`${process.env.OAUTH_REDIRECT_BASE}/oauth-finish.html#data=${payload}`);
