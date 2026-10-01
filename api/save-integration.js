@@ -1,4 +1,8 @@
 const SUPABASE_URL = "https://jouvcvrnsegzecqdkody.supabase.co";
+const { encryptSecret } = require("../lib/secretBox");
+
+const ALLOWED_PROVIDERS = new Set(["brevo", "mailchimp", "klaviyo"]);
+const MAILCHIMP_DC_RE = /^[a-z]{2}\d+$/i;
 
 async function verifySupabaseToken(authHeader) {
   if (!authHeader) return null;
@@ -28,6 +32,11 @@ module.exports = async function (req, res) {
 
   const { provider, access_token, refresh_token, expires_at, provider_account_id } = req.body || {};
   if (!provider || !access_token) return res.status(400).json({ error: "Missing data." });
+  if (!ALLOWED_PROVIDERS.has(provider)) return res.status(400).json({ error: "Unknown provider." });
+  // provider_account_id is used to build https://<dc>.api.mailchimp.com, so it must be a bare datacenter code.
+  if (provider === "mailchimp" && !MAILCHIMP_DC_RE.test(String(provider_account_id || ""))) {
+    return res.status(400).json({ error: "Invalid Mailchimp datacenter." });
+  }
 
   const response = await fetch(`${SUPABASE_URL}/rest/v1/integrations?on_conflict=user_id,provider`, {
     method: "POST",
@@ -35,8 +44,8 @@ module.exports = async function (req, res) {
     body: JSON.stringify([{
       user_id: user.id,
       provider,
-      access_token,
-      refresh_token,
+      access_token: encryptSecret(access_token),
+      refresh_token: encryptSecret(refresh_token),
       token_expires_at: expires_at,
       provider_account_id
     }])
