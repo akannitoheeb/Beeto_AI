@@ -2146,9 +2146,21 @@ supportSubmitBtn.addEventListener("click", async () => {
 // Attaches the logged-in user's access token to a request, so our
 // chat function knows who's asking. Guests send no auth header at all.
 async function getAuthHeaders() {
-  const { data } = await supabaseClient.auth.getSession();
-  const token = data.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  // Guests do not need Supabase auth for /api/chat. In Safari, calling
+  // Supabase auth storage before a guest request can surface the vague
+  // “The string did not match the expected pattern.” error, so skip it.
+  if (isGuest) return {};
+
+  try {
+    const { data } = await supabaseClient.auth.getSession();
+    const token = data?.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch (error) {
+    console.error("Beeto auth session error:", error);
+    // A stale/broken browser auth session should not prevent the chat
+    // endpoint from responding. Treat it as unauthenticated.
+    return {};
+  }
 }
 
 // ================================================================
