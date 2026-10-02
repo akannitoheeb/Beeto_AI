@@ -1,0 +1,23 @@
+/* Beeto app: bigger, on-brand tools-menu controls. Link after style.css in app.html. */
+.tools-popup{min-width:300px;max-width:calc(100vw - 32px);max-height:calc(100dvh - 140px);overflow-y:auto}
+.tools-popup-item{padding:12px}
+.sequence-length-row{gap:8px;padding:4px 10px 12px}
+.sequence-length-btn{min-height:44px;padding:12px 6px;border-radius:10px;font-size:13.5px}
+.email-type-row{display:flex;flex-direction:column;gap:8px;padding:4px 10px 12px}
+.email-type-label{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--gold)}
+.etp-native{position:absolute!important;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden}
+.etp{position:relative}
+.etp-btn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-height:44px;padding:10px 14px;background:var(--bg-main);border:1px solid var(--border);border-radius:10px;color:var(--text);font:600 14px var(--font-body);text-align:left;cursor:pointer;transition:border-color .15s}
+.etp-btn:hover,.etp.is-open .etp-btn{border-color:var(--gold)}
+.etp-btn:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.etp.is-placeholder .etp-btn{color:var(--text-soft);font-weight:500}
+.etp.is-disabled .etp-btn{opacity:.5;cursor:default}
+.etp.is-disabled .etp-btn:hover{border-color:var(--border)}
+.etp-caret{flex-shrink:0;font-size:11px;color:var(--text-soft);transition:transform .15s}
+.etp.is-open .etp-caret{transform:rotate(180deg)}
+.etp-list{margin-top:6px;max-height:210px;overflow-y:auto;padding:4px;background:var(--bg-main);border:1px solid var(--border);border-radius:10px}
+.etp-list[hidden]{display:none}
+.etp-opt{display:flex;align-items:center;gap:10px;width:100%;min-height:42px;padding:10px 12px;background:transparent;border:0;border-radius:8px;color:var(--text);font:500 14px var(--font-body);text-align:left;cursor:pointer}
+.etp-opt:hover{background:var(--bg-panel)}
+.etp-opt.is-selected{background:rgba(201,150,46,.16);font-weight:700}
+.etp-opt.is-selected::after{content:"\2713";margin-left:auto;color:var(--gold);font-weight:700}
