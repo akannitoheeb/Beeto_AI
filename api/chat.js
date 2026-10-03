@@ -174,6 +174,48 @@ async function performWebSearch(query) {
       })
     });
 
+// Search query cleanup: fixes typos and turns a chatty message into a
+// clean search query before it goes to Tavily. Any failure or timeout
+// quietly falls back to the user's original text.
+async function cleanSearchQuery(apiKey, userText) {
+  const original = String(userText || "").trim();
+  if (!apiKey || original.length < 3) return original;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: TEXT_MODEL,
+        messages: [
+          {
+            role: "system",
+            content: "Rewrite the user's message as one clean web search query. Fix spelling, grammar and typing mistakes (including voice dictation errors), keep names, brands and places exactly as intended, and keep their meaning. Drop filler words. Reply with ONLY the query on one line: no quotes, no explanation, under 15 words."
+          },
+          { role: "user", content: original.slice(0, 400) }
+        ],
+        reasoning_format: "hidden",
+        reasoning_effort: "low",
+        max_completion_tokens: 300
+      }),
+      signal: AbortSignal.timeout(4000)
+    });
+
+    if (!response.ok) return original;
+
+    const data = await response.json();
+    const cleaned = stripThinkingBlock(data.choices?.[0]?.message?.content || "")
+      .split("\n")[0]
+      .replace(/^["'`\s]+|["'`\s]+$/g, "")
+      .trim();
+
+    if (!cleaned || cleaned.length > 200) return original;
+    return cleaned;
+  } catch (error) {
+    return original;
+  }
+}
+
     if (!response.ok) {
       console.error("Tavily search error:", response.status, await response.text());
       return null;
@@ -266,6 +308,21 @@ sequence), unlimited brand profiles/projects, and unlimited memory.
 
 Guests (not signed in) get 1 free message per day before being asked to
 sign up.
+`.trim();
+
+const TYPO_TOLERANCE_INSTRUCTION = `
+Users often make spelling, grammar, punctuation or typing mistakes, or have
+errors from voice dictation. Always work out what they most likely meant and
+answer that, without making them retype anything. Never point out or correct
+their mistakes unless they ask you to proofread. Any text you write must be
+spelled and punctuated correctly, even if their brief had errors, so do not
+copy their typos into emails, subject lines or captions. Keep brand names,
+product names, people's names and deliberate stylistic choices exactly as
+the user wrote them. Respect their spelling style (for example British or
+Nigerian English such as "colour") and do not "correct" Nigerian English or
+Pidgin phrasing as if it were wrong. Only ask a short clarifying question
+when a mistake makes the meaning genuinely ambiguous and a wrong guess
+would waste their time or message credits.
 `.trim();
 
 // Appended only when the client is in hands-free voice mode. The reply
@@ -666,7 +723,7 @@ async function extractPostReplyExtras(apiKey, userText, assistantText, existingM
 }
 
 function buildSystemInstruction(settings = {}) {
-  const parts = [BASE_INSTRUCTION];
+  const parts = [BASE_INSTRUCTION, TYPO_TOLERANCE_INSTRUCTION];
 
   if (settings.tone) {
     parts.push(`Default tone for your replies: ${settings.tone}.`);
@@ -1216,7 +1273,8 @@ module.exports = async function (req, res) {
     let searchResults = null;
     if (!isStructuredMode && webSearch) {
       if (canStream) sseSend(res, { type: "status", text: "Searching the web" });
-      searchResults = await performWebSearch(latestText);
+      const searchQuery = await cleanSearchQuery(apiKey, latestText);
+      searchResults = await performWebSearch(searchQuery);
       if (canStream) sseSend(res, { type: "status", text: searchResults ? "Reading the results" : "Thinking" });
     }
 
