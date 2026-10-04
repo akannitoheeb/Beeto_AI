@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Free Email Subject Line Generator &amp; Checker | Beeto</title>
+  <meta name="description" content="Free email subject line generator and checker. Write 10 subject lines in seconds, then check length, spam trigger words and how they look on a phone. No signup." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://beeto.toheebakanni.name.ng/email-subject-line-generator.html" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Beeto" />
+  <meta property="og:title" content="Free Email Subject Line Generator & Checker" />
+  <meta property="og:description" content="Write subject lines in seconds, then check them for length, spam triggers and phone preview. Free, no signup." />
+  <meta property="og:url" content="https://beeto.toheebakanni.name.ng/email-subject-line-generator.html" />
+  <meta property="og:image" content="https://beeto.toheebakanni.name.ng/beeto-wordmark.png" />
+
+  <meta name="theme-color" content="#131A26" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/beeto-favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/beeto-favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/beeto-app-icon-180.png">
+  <link rel="manifest" href="/site.webmanifest">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Email Subject Line Generator & Checker",
+    "url": "https://beeto.toheebakanni.name.ng/email-subject-line-generator.html",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Any (web browser)",
+    "description": "Free tool that writes email subject lines and checks them for length, spam trigger words and phone preview.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "creator": { "@type": "Person", "name": "Toheeb Akanni" },
+    "isPartOf": { "@type": "WebSite", "name": "Beeto", "url": "https://beeto.toheebakanni.name.ng/" }
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      { "@type": "Question", "name": "Is this subject line generator really free?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes. There is no signup and no limit. The tool runs in your browser, so nothing you type is sent to a server." } },
+      { "@type": "Question", "name": "How long should an email subject line be?",
+        "acceptedAnswer": { "@type": "Answer", "text": "A good rule of thumb is 30 to 50 characters. Many phones cut subject lines off at around 40 characters, though it varies by device and email app, so put the important words first." } },
+      { "@type": "Question", "name": "Does this tool use AI?",
+        "acceptedAnswer": { "@type": "Answer", "text": "This page uses proven subject line patterns and fills them with your topic, which makes it fast and private. For subject lines written from your full email, Beeto's AI chatbot can do that." } },
+      { "@type": "Question", "name": "What are spam trigger words?",
+        "acceptedAnswer": { "@type": "Answer", "text": "They are words and styles often linked to junk mail, such as free, urgent, act now, all-caps words and several exclamation marks. Modern spam filters also weigh sender reputation and authentication (SPF, DKIM, DMARC), so a subject line alone rarely decides where an email lands." } },
+      { "@type": "Question", "name": "Should I use emojis in subject lines?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Sparingly. One emoji can help a message stand out for some audiences, but several can look spammy. Test it with your own list instead of assuming." } }
+    ]
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #131A26;
+      --bg-deep: #0E141E;
+      --panel: #1B2333;
+      --border: #263047;
+      --text: #EDEAE0;
+      --soft: #8B93A7;
+      --gold: #C9962E;
+      --gold-deep: #A87A1F;
+      --good: #8FD19E;
+      --warn: #E3B04B;
+      --bad: #E58C7C;
+      --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+      --body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: var(--body); font-size: 17px; line-height: 1.6;
+    }
+    a { color: var(--gold); }
+    :focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+
+    .nav {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      max-width: 920px; margin: 0 auto; padding: 18px 20px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text);
+      font-family: var(--display); font-weight: 700; font-size: 1.15rem; }
+    .brand img { width: 24px; height: 24px; }
+    .nav-links { display: flex; align-items: center; gap: 18px; font-size: .95rem; }
+    .nav-links a { color: var(--soft); text-decoration: none; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links .open { color: #1a1204; background: var(--gold); padding: 7px 14px; border-radius: 8px; font-weight: 600; }
+    .nav-links .open:hover { background: #d7a43a; color: #1a1204; }
+
+    main { max-width: 920px; margin: 0 auto; padding: 8px 20px 56px; }
+
+    h1 {
+      font-family: var(--display); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05;
+      font-size: clamp(2.1rem, 6vw, 3.5rem); margin: 28px 0 14px;
+    }
+    .lede { color: var(--soft); max-width: 60ch; margin: 0 0 28px; font-size: 1.05rem; }
+
+    .tool { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+    .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg-deep); }
+    .tab {
+      flex: 1; padding: 14px 16px; background: none; border: 0; color: var(--soft);
+      font: 600 .98rem var(--body); cursor: pointer; border-bottom: 2px solid transparent;
+    }
+    .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--gold); background: var(--panel); }
+    .panel { padding: 22px; }
+    .panel[hidden] { display: none; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field.wide { grid-column: 1 / -1; }
+    label, .label { font-size: .92rem; font-weight: 600; }
+    .hint { font-weight: 400; color: var(--soft); }
+    input[type="text"], select, textarea {
+      width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; padding: 11px 12px; font: 400 1rem var(--body);
+    }
+    input[type="text"]::placeholder, textarea::placeholder { color: #5f6881; }
+    textarea { resize: vertical; min-height: 84px; }
+    .check { display: flex; align-items: center; gap: 10px; font-weight: 500; }
+    .check input { width: 18px; height: 18px; accent-color: var(--gold); }
+
+    .btn {
+      background: var(--gold); color: #1a1204; border: 0; border-radius: 8px; padding: 12px 20px;
+      font: 700 1rem var(--body); cursor: pointer;
+    }
+    .btn:hover { background: #d7a43a; }
+    .btn.ghost { background: none; color: var(--text); border: 1px solid var(--border); padding: 7px 12px; font-size: .88rem; font-weight: 600; }
+    .btn.ghost:hover { border-color: var(--gold); color: var(--gold); }
+    .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 4px; }
+    .msg { color: var(--bad); font-size: .92rem; min-height: 1.2em; }
+
+    .results { list-style: none; margin: 22px 0 0; padding: 0; border-top: 1px solid var(--border); }
+    .results li {
+      display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      padding: 13px 0; border-bottom: 1px solid var(--border);
+    }
+    .res-text { font-weight: 500; overflow-wrap: anywhere; }
+    .res-meta { color: var(--soft); font-size: .84rem; margin-top: 2px; }
+    .res-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .more { margin-top: 16px; }
+
+    .check-top { display: flex; gap: 22px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+    .score { font-family: var(--display); font-weight: 800; font-size: 4.2rem; line-height: 1; letter-spacing: -0.03em; min-width: 2.2ch; }
+    .score-label { font-weight: 600; }
+    .bar { height: 8px; background: var(--bg); border-radius: 99px; overflow: hidden; margin-top: 8px; width: 220px; max-width: 100%; }
+    .bar > i { display: block; height: 100%; width: 0; background: var(--gold); transition: width .25s ease; }
+    .fine { color: var(--soft); font-size: .84rem; margin: 6px 0 0; max-width: 46ch; }
+
+    .inbox { margin-top: 22px; display: grid; gap: 6px; }
+    .inbox .cap { color: var(--soft); font-size: .84rem; margin-top: 8px; }
+    .mail {
+      display: flex; gap: 10px; align-items: flex-start; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 10px; padding: 11px 13px; font-size: .95rem; line-height: 1.4;
+    }
+    .mail.phone { max-width: 360px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); margin-top: 6px; flex-shrink: 0; }
+    .mail b { display: block; font-weight: 600; }
+    .mail .subj { display: block; font-weight: 500; overflow-wrap: anywhere; }
+    .mail .pre { display: block; color: var(--soft); font-size: .88rem; }
+
+    .findings { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 9px; }
+    .findings li { display: flex; gap: 10px; align-items: baseline; }
+    .mark { font-weight: 700; width: 1.2em; flex-shrink: 0; text-align: center; }
+    .ok .mark { color: var(--good); } .warn .mark { color: var(--warn); } .bad .mark { color: var(--bad); }
+
+    .cta {
+      margin: 36px 0 0; border: 1px solid var(--gold-deep); border-radius: 14px; padding: 24px;
+      display: flex; gap: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+    }
+    .cta h2 { font-family: var(--display); font-size: 1.4rem; margin: 0 0 6px; line-height: 1.2; }
+    .cta p { margin: 0; color: var(--soft); max-width: 52ch; }
+    .cta a.btn { text-decoration: none; display: inline-block; }
+
+    article { margin-top: 52px; max-width: 66ch; }
+    article h2 { font-family: var(--display); font-size: 1.7rem; letter-spacing: -0.01em; margin: 40px 0 10px; line-height: 1.15; }
+    article h2:first-child { margin-top: 0; }
+    article p { margin: 0 0 14px; }
+    article ul { padding-left: 1.2em; margin: 0 0 14px; }
+    article li { margin-bottom: 6px; }
+    details { border-bottom: 1px solid var(--border); padding: 14px 0; }
+    summary { cursor: pointer; font-weight: 600; }
+    details p { margin: 10px 0 0; color: #c9c6bb; }
+
+    footer { max-width: 920px; margin: 0 auto; padding: 24px 20px 40px; color: var(--soft); font-size: .9rem; border-top: 1px solid var(--border); }
+    footer a { color: var(--soft); margin-right: 16px; }
+
+    @media (max-width: 620px) {
+      body { font-size: 16px; }
+      .grid { grid-template-columns: 1fr; }
+      .panel { padding: 16px; }
+      .results li { flex-direction: column; align-items: flex-start; }
+      .nav-links a:not(.open) { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <a href="/" class="brand"><img src="/beeto-icon-gold-512.png" alt="" />Beeto</a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="/about.html">About</a>
+      <a href="/faq.html">FAQ</a>
+      <a href="/" class="open">Open Beeto</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Email subject line generator</h1>
+    <p class="lede">Free, no signup. Write ten subject lines in seconds, then check any subject line for length, spam trigger words and how it looks on a phone.</p>
+
+    <section class="tool" aria-label="Subject line tools">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" id="tab-gen" aria-controls="panel-gen" aria-selected="true">Write subject lines</button>
+        <button class="tab" role="tab" id="tab-chk" aria-controls="panel-chk" aria-selected="false">Check a subject line</button>
+      </div>
+
+      <div class="panel" id="panel-gen" role="tabpanel" aria-labelledby="tab-gen">
+        <div class="grid">
+          <div class="field wide">
+            <label for="topic">What is the email about? <span class="hint">A few words, like "our new sneaker collection"</span></label>
+            <input type="text" id="topic" maxlength="80" placeholder="our new sneaker collection" autocomplete="off" />
+          </div>
+          <div class="field">
+            <label for="type">Type of email</label>
+            <select id="type">
+              <option value="promo">Sale or offer</option>
+              <option value="newsletter">Newsletter</option>
+              <option value="welcome">Welcome email</option>
+              <option value="cart">Abandoned cart</option>
+              <option value="event">Event or webinar</option>
+              <option value="launch">Product launch</option>
+              <option value="followup">Follow-up</option>
+              <option value="reengage">Win back inactive subscribers</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="tone">Tone</label>
+            <select id="tone">
+              <option value="f">Friendly</option>
+              <option value="u">Urgent</option>
+              <option value="c">Curious</option>
+              <option value="p">Professional</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="aud">Who is it for? <span class="hint">Optional</span></label>
+            <input type="text" id="aud" maxlength="40" placeholder="small business owners" autocomplete="off" />
+          </div>
+          <div class="field" style="justify-content:flex-end">
+            <label class="check"><input type="checkbox" id="pers" /> Start with [First Name]</label>
+          </div>
+        </div>
+        <div class="actions" style="margin-top:18px">
+          <button class="btn" id="go">Write subject lines</button>
+          <span class="msg" id="genMsg" role="alert"></span>
+        </div>
+        <ul class="results" id="results" aria-live="polite"></ul>
+        <button class="btn ghost more" id="more" hidden>Show different ones</button>
+      </div>
+
+      <div class="panel" id="panel-chk" role="tabpanel" aria-labelledby="tab-chk" hidden>
+        <div class="field">
+          <label for="subject">Paste your subject line</label>
+          <textarea id="subject" rows="2" maxlength="200" placeholder="Your subject line"></textarea>
+        </div>
+        <div id="report" hidden>
+          <div class="check-top">
+            <div class="score" id="scoreNum">0</div>
+            <div>
+              <div class="score-label" id="scoreLabel"></div>
+              <div class="bar"><i id="scoreBar"></i></div>
+              <p class="fine">A rule-of-thumb score for common problems. It does not predict your open rate.</p>
+            </div>
+          </div>
+          <div class="inbox" aria-label="Inbox preview">
+            <div class="cap">On a phone (cut off at about 40 characters)</div>
+            <div class="mail phone"><span class="dot"></span><div><b>Your Brand</b><span class="subj" id="prevPhone"></span><span class="pre">Your preview text appears here…</span></div></div>
+            <div class="cap">On a desktop (cut off at about 70 characters)</div>
+            <div class="mail"><span class="dot"></span><div><b>Your Brand</b><span class="subj" id="prevDesk"></span><span class="pre">Your preview text appears here…</span></div></div>
+          </div>
+          <ul class="findings" id="findings"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta" aria-label="Try Beeto">
+      <div>
+        <h2>Want subject lines written for your exact email?</h2>
+        <p>Beeto is a free AI email marketing assistant. Paste your offer and it writes the subject line and the full email, checks it for spam and compliance, and can send it through Brevo, Mailchimp or Klaviyo.</p>
+      </div>
+      <a class="btn" href="/">Try Beeto free</a>
+    </section>
+
+    <article>
+      <h2>How to write a subject line people open</h2>
+      <p>The subject line has one job: get the right person to open the email. It competes with dozens of other messages, so it needs to be clear before it is clever.</p>
+      <ul>
+        <li><b>Say what is inside.</b> A reader should know why to open it. Vague teasers can win one open and lose trust.</li>
+        <li><b>Put the important words first.</b> Phones cut subject lines off at roughly 40 characters, and it varies by device and app.</li>
+        <li><b>Keep it short.</b> Around 30 to 50 characters works for most emails. Read it aloud. If it needs a breath, trim it.</li>
+        <li><b>Be specific.</b> A number, a name or a real detail beats a general claim.</li>
+        <li><b>Match the email.</b> If the subject promises something the email does not deliver, people unsubscribe or mark it as spam.</li>
+        <li><b>Test, then keep what works.</b> Send two versions to part of your list and use the better one for the rest.</li>
+      </ul>
+      <h2>What can hurt delivery</h2>
+      <p>Words like "free", "urgent" and "act now", all-caps words, and several exclamation marks are common spam signals. They will not always send an email to spam, because filters also look at your sender reputation, authentication (SPF, DKIM and DMARC) and how recipients react. Still, there is rarely a reason to risk it.</p>
+
+      <h2>Questions</h2>
+      <details><summary>Is this subject line generator really free?</summary><p>Yes. There is no signup and no limit. The tool runs in your browser, so nothing you type is sent to a server.</p></details>
+      <details><summary>How long should an email subject line be?</summary><p>A good rule of thumb is 30 to 50 characters. Many phones cut subject lines off at around 40 characters, though it varies by device and email app, so put the important words first.</p></details>
+      <details><summary>Does this tool use AI?</summary><p>This page uses proven subject line patterns and fills them with your topic, which makes it fast and private. For subject lines written from your full email, <a href="/">Beeto's AI chatbot</a> can do that.</p></details>
+      <details><summary>What are spam trigger words?</summary><p>They are words and styles often linked to junk mail, such as free, urgent, act now, all-caps words and several exclamation marks. Modern spam filters also weigh sender reputation and authentication, so a subject line alone rarely decides where an email lands.</p></details>
+      <details><summary>Should I use emojis in subject lines?</summary><p>Sparingly. One emoji can help a message stand out for some audiences, but several can look spammy. Test it with your own list instead of assuming.</p></details>
+    </article>
+  </main>
+
+  <footer>
+    <a href="/">Beeto</a><a href="/about.html">About</a><a href="/faq.html">FAQ</a><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a>
+    <div style="margin-top:10px">Built by <a href="https://toheebakanni.name.ng" style="margin:0">Toheeb Akanni</a> in Lagos, Nigeria.</div>
+  </footer>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- Templates: [text, tone]. {t} topic, {T} Topic, {a}/{A} audience, {n} number ----------
+  // Tones: f friendly, u urgent, c curious, p professional
+  var TEMPLATES = {
+    promo: [
+      ["Save on {t} this week","f"],["Last call: {t}","u"],["{T}, for a limited time","u"],
+      ["A little something for you: {t}","f"],["Early access to {t}","c"],["Ready for {t}?","f"],
+      ["Shop {t} before it's gone","u"],["Our offer on {t}","p"],["What's inside: {t}","c"],
+      ["Don't miss {t}","u"],["{T}: details inside","p"],["Why people love {t}","c"],
+      ["{n} reasons to try {t}","c"],["For you: {t}","f"],["Your invitation: {t}","p"]
+    ],
+    promoA: [["{A}, this offer is for you","f"],["A note for {a}: {t}","p"]],
+    newsletter: [
+      ["This week: {t}","f"],["{T}, in plain English","f"],["What we learned about {t}","c"],
+      ["{n} things to know about {t}","p"],["Your update on {t}","p"],["A closer look at {t}","c"],
+      ["The latest on {t}","p"],["Something worth reading: {t}","f"],["What most people miss about {t}","c"],
+      ["{T}: this month's highlights","p"],["Quick read: {t}","f"],["Let's talk about {t}","f"],
+      ["Before the week ends: {t}","u"]
+    ],
+    newsletterA: [["For {a}: {t}","p"],["{A}, here's your update","f"]],
+    welcome: [
+      ["Welcome! Here's how to start with {t}","f"],["You're in. Next: {t}","f"],["Welcome aboard","f"],
+      ["Your first step with {t}","p"],["Glad you're here","f"],["Getting started with {t}","p"],
+      ["Here's what happens next","c"],["Start here: {t}","p"],["What to expect from us on {t}","c"],
+      ["A warm welcome and one tip on {t}","f"],["Welcome. A quick guide to {t}","p"],["Do this first: {t}","u"]
+    ],
+    welcomeA: [["Welcome, {a}","f"],["Made for {a}: start here","p"]],
+    cart: [
+      ["Still thinking about {t}?","f"],["You left something behind","c"],["Your {t} is waiting","f"],
+      ["Still interested in {t}?","p"],["Ready when you are: {t}","f"],["We saved your {t}","f"],
+      ["Complete your order","p"],["Last chance to grab {t}","u"],["Did something go wrong?","c"],
+      ["A quick reminder about {t}","p"],["Your cart is waiting","f"],["Before {t} sells out","u"]
+    ],
+    cartA: [["{A}, did you forget something?","f"]],
+    event: [
+      ["You're invited: {t}","f"],["Join us for {t}","f"],["Save your seat: {t}","u"],
+      ["Happening soon: {t}","u"],["What you'll learn at {t}","c"],["Reminder: {t} starts soon","u"],
+      ["Don't miss {t}","u"],["{T}: all the details","p"],["Your spot at {t}","p"],
+      ["Be there for {t}","f"],["A live session on {t}","c"],["Register for {t}","p"]
+    ],
+    eventA: [["For {a}: {t}","p"],["{A}, we saved you a seat","f"]],
+    launch: [
+      ["Introducing {t}","p"],["{T} is here","f"],["Meet {t}","f"],["It's finally here: {t}","f"],
+      ["Now available: {t}","p"],["We built {t}","c"],["The wait is over: {t}","u"],
+      ["First look: {t}","c"],["What's new: {t}","p"],["{T}: what it does and why","p"],
+      ["Say hello to {t}","f"],["Our newest: {t}","f"]
+    ],
+    launchA: [["Made for {a}: {t}","p"],["{A}, meet {t}","f"]],
+    followup: [
+      ["Quick question about {t}","c"],["Following up on {t}","p"],["Any thoughts on {t}?","f"],
+      ["Checking in about {t}","f"],["One more thing on {t}","c"],["A short follow-up: {t}","p"],
+      ["Still keen on {t}?","f"],["Did you see this? {t}","c"],["Next steps for {t}","p"],
+      ["Circling back on {t}","p"],["Can we pick up {t}?","f"],["Last note on {t}","u"]
+    ],
+    followupA: [["{A}, a quick question","c"]],
+    reengage: [
+      ["We miss you","f"],["Still want to hear from us?","c"],["It's been a while","f"],
+      ["Is this goodbye?","c"],["Here's what you missed on {t}","c"],["Come back for {t}","f"],
+      ["A fresh look at {t}","c"],["Let's catch up on {t}","f"],["Should we keep in touch?","p"],
+      ["Your preferences, your choice","p"],["What's new with {t}","p"],["One last email from us","u"]
+    ],
+    reengageA: [["{A}, we saved this for you","f"]]
+  };
+
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+    }
+    return a;
+  }
+  function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+  function uncap(s) { return s ? s.charAt(0).toLowerCase() + s.slice(1) : s; }
+  function len(s) { return Array.from(s).length; }
+
+  function generate(opts) {
+    var topic = (opts.topic || "").trim();
+    var aud = (opts.audience || "").trim();
+    var pool = (TEMPLATES[opts.type] || []).slice();
+    if (aud) pool = pool.concat(TEMPLATES[opts.type + "A"] || []);
+    if (!topic) pool = pool.filter(function (p) { return p[0].indexOf("{t}") === -1 && p[0].indexOf("{T}") === -1; });
+
+    var preferred = shuffle(pool.filter(function (p) { return p[1] === opts.tone; }));
+    var others = shuffle(pool.filter(function (p) { return p[1] !== opts.tone; }));
+    // Audience templates first so the "who is it for" field visibly does something.
+    var withAud = aud ? shuffle(pool.filter(function (p) { return /\{[aA]\}/.test(p[0]); })).slice(0, 2) : [];
+    var ordered = withAud.concat(preferred, others);
+
+    var seen = {}, out = [];
+    for (var i = 0; i < ordered.length && out.length < 10; i++) {
+      var tpl = ordered[i][0];
+      if (seen[tpl]) continue;
+      seen[tpl] = true;
+      var n = [3, 5, 7][Math.floor(Math.random() * 3)];
+      var s = tpl.replace(/\{n\}/g, n).replace(/\{T\}/g, cap(topic)).replace(/\{t\}/g, topic)
+                 .replace(/\{A\}/g, cap(aud)).replace(/\{a\}/g, aud);
+      if (opts.personalize && tpl.indexOf("{A}") !== 0) {
+        // Topic-first templates keep the topic exactly as typed (it may be a proper noun).
+        if (tpl.indexOf("{T}") === 0) s = tpl.replace(/\{n\}/g, n).replace(/\{T\}/g, topic).replace(/\{t\}/g, topic);
+        else s = uncap(s);
+        s = "[First Name], " + s;
+      }
+      out.push(s);
+    }
+    return out;
+  }
+
+  // ---------- Checker ----------
+  var SPAM = ["free","act now","limited time","urgent","winner","congratulations","guarantee","guaranteed",
+    "cash","earn","click here","buy now","risk-free","risk free","no obligation","make money","cheap",
+    "order now","once in a lifetime","double your","miracle","apply now","dear friend","$$$","100%"];
+
+  function scoreSubject(raw) {
+    var s = raw.replace(/\s+/g, " ").trim();
+    var L = len(s);
+    var items = [];   // {level: ok|warn|bad, text}
+    var score = 60;
+
+    if (!s) return { score: 0, label: "", items: [], text: "" };
+
+    // Length
+    if (L >= 30 && L <= 50) { score += 15; items.push({ level: "ok", text: L + " characters. That is in the 30 to 50 range that works for most emails." }); }
+    else if (L < 30 && L >= 20) { score += 8; items.push({ level: "warn", text: L + " characters. Short is fine, but check it still says what the email is about." }); }
+    else if (L > 50 && L <= 60) { score += 8; items.push({ level: "warn", text: L + " characters. It may be cut off on phones, so put the key words in the first 40." }); }
+    else if (L < 20) { score -= 10; items.push({ level: "bad", text: L + " characters. Very short subject lines can be vague. Add a specific detail." }); }
+    else { score -= 10; items.push({ level: "bad", text: L + " characters. Too long. Most of it will be cut off on a phone." }); }
+
+    // Word count
+    var words = s.split(" ").filter(Boolean).length;
+    if (words >= 4 && words <= 9) { score += 5; items.push({ level: "ok", text: words + " words, a readable length." }); }
+    else if (words > 12) { score -= 5; items.push({ level: "warn", text: words + " words. Try cutting to under 10." }); }
+
+    // Spam words
+    var lower = s.toLowerCase(), found = [];
+    SPAM.forEach(function (w) {
+      var hit = /^[a-z -]+$/.test(w) ? new RegExp("\\b" + w + "\\b").test(lower) : lower.indexOf(w) !== -1;
+      if (hit) found.push(w);
+    });
+    if (found.length) {
+      score -= Math.min(30, found.length * 10);
+      items.push({ level: "bad", text: "Common spam trigger" + (found.length > 1 ? "s" : "") + ": " + found.join(", ") + ". Try plainer words." });
+    } else {
+      items.push({ level: "ok", text: "No common spam trigger words found." });
+    }
+
+    // ALL CAPS
+    var caps = (s.match(/\b[A-Z]{4,}\b/g) || []);
+    if (caps.length) {
+      score -= Math.min(20, caps.length * 8);
+      items.push({ level: "bad", text: "All-caps word" + (caps.length > 1 ? "s" : "") + " (" + caps.join(", ") + "). Capitals can read as shouting and look spammy." });
+    }
+
+    // Punctuation
+    var ex = (s.match(/!/g) || []).length;
+    if (ex >= 2) { score -= 8; items.push({ level: "bad", text: "Several exclamation marks. Use one at most." }); }
+    else if (ex === 1) { items.push({ level: "warn", text: "One exclamation mark. Fine, but check the tone." }); }
+    if (/\?{2,}/.test(s)) { score -= 5; items.push({ level: "warn", text: "Repeated question marks. One is enough." }); }
+    if (/\$\$|!!!|\.\.\.\./.test(s)) { score -= 5; }
+
+    // Emoji
+    var emoji = (s.match(/\p{Extended_Pictographic}/gu) || []).length;
+    if (emoji > 2) { score -= 5; items.push({ level: "warn", text: emoji + " emojis. More than one or two can look spammy." }); }
+
+    // Positives
+    if (/\d/.test(s)) { score += 5; items.push({ level: "ok", text: "Includes a number, which makes a promise more specific." }); }
+    if (/\?\s*$/.test(s) && !/\?{2,}/.test(s)) { score += 3; items.push({ level: "ok", text: "Ends with a question, which can invite a reply or a click." }); }
+    if (/\[(first )?name\]|\{\{.*\}\}|\*\|.*\|\*/i.test(s)) { score += 5; items.push({ level: "ok", text: "Personalised with a merge tag. Make sure it falls back to a default if the name is missing." }); }
+
+    // Deceptive prefixes
+    if (/^(re|fwd?):/i.test(s)) { score -= 15; items.push({ level: "bad", text: "Starts with RE: or FWD:. Fake reply prefixes mislead readers and hurt trust." }); }
+
+    // Phone cut-off
+    if (L > 40) items.push({ level: "warn", text: "On many phones it will end after: \"" + Array.from(s).slice(0, 40).join("") + "…\"" });
+
+    score = Math.max(0, Math.min(100, score));
+    var label = score >= 80 ? "Strong" : score >= 60 ? "Decent" : "Needs work";
+    return { score: score, label: label, items: items, text: s };
+  }
+
+  window.__subjectTool = { generate: generate, scoreSubject: scoreSubject };
+
+  // ---------- UI ----------
+  if (typeof document === "undefined") return;
+  var $ = function (id) { return document.getElementById(id); };
+
+  function setTab(name) {
+    var gen = name === "gen";
+    $("tab-gen").setAttribute("aria-selected", gen);
+    $("tab-chk").setAttribute("aria-selected", !gen);
+    $("panel-gen").hidden = !gen;
+    $("panel-chk").hidden = gen;
+  }
+  $("tab-gen").addEventListener("click", function () { setTab("gen"); });
+  $("tab-chk").addEventListener("click", function () { setTab("chk"); });
+
+  function copyText(text, btn) {
+    function done() { var o = btn.textContent; btn.textContent = "Copied"; setTimeout(function () { btn.textContent = o; }, 1200); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else { fallback(); }
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); done(); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+  }
+
+  function run() {
+    var topic = $("topic").value.trim();
+    if (!topic) { $("genMsg").textContent = "Add a few words about your email first."; $("topic").focus(); return; }
+    $("genMsg").textContent = "";
+    var lines = generate({
+      topic: topic, audience: $("aud").value, type: $("type").value,
+      tone: $("tone").value, personalize: $("pers").checked
+    });
+    var ul = $("results");
+    ul.innerHTML = "";
+    lines.forEach(function (text) {
+      var li = document.createElement("li");
+      var left = document.createElement("div");
+      var t = document.createElement("div"); t.className = "res-text"; t.textContent = text;
+      var m = document.createElement("div"); m.className = "res-meta";
+      m.textContent = len(text) + " characters";
+      left.appendChild(t); left.appendChild(m);
+      var right = document.createElement("div"); right.className = "res-actions";
+      var c = document.createElement("button"); c.className = "btn ghost"; c.textContent = "Copy";
+      c.addEventListener("click", function () { copyText(text, c); });
+      var k = document.createElement("button"); k.className = "btn ghost"; k.textContent = "Check";
+      k.addEventListener("click", function () { $("subject").value = text; setTab("chk"); check(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+      right.appendChild(c); right.appendChild(k);
+      li.appendChild(left); li.appendChild(right);
+      ul.appendChild(li);
+    });
+    $("more").hidden = false;
+  }
+  $("go").addEventListener("click", run);
+  $("more").addEventListener("click", run);
+  $("topic").addEventListener("keydown", function (e) { if (e.key === "Enter") run(); });
+
+  function preview(s, max) { var a = Array.from(s); return a.length > max ? a.slice(0, max).join("").trimEnd() + "…" : s; }
+
+  function check() {
+    var r = scoreSubject($("subject").value);
+    if (!r.text) { $("report").hidden = true; return; }
+    $("report").hidden = false;
+    var color = r.score >= 80 ? "var(--good)" : r.score >= 60 ? "var(--warn)" : "var(--bad)";
+    $("scoreNum").textContent = r.score;
+    $("scoreNum").style.color = color;
+    $("scoreLabel").textContent = r.label;
+    $("scoreBar").style.width = r.score + "%";
+    $("scoreBar").style.background = color;
+    $("prevPhone").textContent = preview(r.text, 40);
+    $("prevDesk").textContent = preview(r.text, 70);
+    var ul = $("findings"); ul.innerHTML = "";
+    var order = { bad: 0, warn: 1, ok: 2 };
+    r.items.sort(function (a, b) { return order[a.level] - order[b.level]; }).forEach(function (it) {
+      var li = document.createElement("li"); li.className = it.level;
+      var mk = document.createElement("span"); mk.className = "mark";
+      mk.textContent = it.level === "ok" ? "✓" : it.level === "warn" ? "!" : "✕";
+      mk.setAttribute("aria-label", it.level === "ok" ? "Good" : it.level === "warn" ? "Check" : "Problem");
+      var tx = document.createElement("span"); tx.textContent = it.text;
+      li.appendChild(mk); li.appendChild(tx); ul.appendChild(li);
+    });
+  }
+  $("subject").addEventListener("input", check);
+})();
+</script>
+</body>
+</html>
