@@ -292,13 +292,21 @@ const bargeInEnabled = !isMobileDevice; // on phones the mic and speaker fight o
 // tell a genuine interruption apart from the mic just picking up
 // Beeto's own voice through the speaker. See looksLikeEcho() below.
 let currentlySpokenText = null;
+let lastSpokenText = null;   // what Beeto said most recently, kept briefly after speech ends
+let lastSpeechEndedAt = 0;   // when it finished, so late echo of its last words can be ignored
+function markSpeechEnded() {
+  if (currentlySpokenText) lastSpokenText = currentlySpokenText;
+  lastSpeechEndedAt = Date.now();
+  currentlySpokenText = null;
+}
 
 function looksLikeEcho(transcript) {
   const heard = transcript.trim().toLowerCase();
-  if (!currentlySpokenText) return false;
+  const sourceText = currentlySpokenText || lastSpokenText;
+  if (!sourceText) return false;
   // Word-by-word overlap rather than an exact substring check, since
   // recognized speech rarely lines up exactly with the source text.
-  const spoken = currentlySpokenText.toLowerCase();
+  const spoken = sourceText.toLowerCase();
   const heardWords = heard.split(/\s+/).filter(w => w.length > 1);
   if (heardWords.length === 0) return true; // nothing substantial to judge — treat as inconclusive
   const matchedWords = heardWords.filter(w => spoken.includes(w));
@@ -376,7 +384,7 @@ async function speakText(text, onDone) {
       audio.onended = () => {
         URL.revokeObjectURL(url);
         if (currentTtsAudio === audio) currentTtsAudio = null;
-        currentlySpokenText = null;
+        markSpeechEnded();
         if (onDone) onDone();
       };
       audio.onerror = () => {
@@ -480,17 +488,31 @@ function speakWithBrowserVoice(plainText, onDone) {
     if (myToken !== speechToken) return; // cancelled or replaced by newer speech
 
     if (index >= chunks.length) {
-      currentlySpokenText = null;
+      markSpeechEnded();
       if (onDone) onDone();
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(chunks[index++]);
+    const piece = chunks[index++];
+    const utterance = new SpeechSynthesisUtterance(piece);
+    window.__beetoUtterance = utterance; // keeps Chrome from garbage-collecting it before onend fires
     if (voice) {
       utterance.voice = voice;
       utterance.lang = voice.lang;
     }
-    utterance.onend = speakNext;
+
+    let finished = false;
+    const advance = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(watchdog);
+      speakNext();
+    };
+    // Safety net: if the browser never fires onend, move on anyway so
+    // the orb can't get stuck on "Speaking…" and never listen again.
+    const watchdog = setTimeout(advance, Math.max(4000, piece.length * 90 + 3000));
+
+    utterance.onend = advance;
     utterance.onerror = (event) => {
       if (myToken !== speechToken) return;
       if (event.error === "canceled" || event.error === "interrupted") return;
@@ -498,7 +520,7 @@ function speakWithBrowserVoice(plainText, onDone) {
         voice = null; // that voice failed, retry this same piece with the default voice
         index--;
       }
-      speakNext();
+      advance();
     };
 
     speechSynthesis.speak(utterance);
@@ -751,7 +773,8 @@ if (SpeechRecognitionCtor) {
     // talking, cut it off right away. Without headphones the mic can hear
     // Beeto's own voice, so first check whether what was heard matches
     // what's currently being spoken (looksLikeEcho).
-    if (bargeInEnabled && isBeetoTalking) {
+    const justFinishedTalking = Date.now() - lastSpeechEndedAt < 2500; // late echo of Beeto's last words
+    if (bargeInEnabled && (isBeetoTalking || justFinishedTalking)) {
       const wordsHeardSoFar = transcript.trim().split(/\s+/).filter(Boolean).length;
       if (wordsHeardSoFar < 2) {
         return; // one short fragment is what the start of an echo looks like; wait for more
@@ -936,7 +959,15 @@ function resumeVoiceListening() {
   }
   setVoiceStatus("listening");
   commandProducedResult = false;
-  startCommandListening();
+  if (!bargeInEnabled) {
+    // Nothing should be running now, so clear any stuck recognizer state
+    // (a stuck flag makes startCommandListening() silently do nothing).
+    try { commandRecognition.abort(); } catch (error) {}
+    commandRecognitionActive = false;
+  }
+  setTimeout(() => {
+    if (voiceModeEnabled && !commandRecognitionActive) startCommandListening();
+  }, 250);
 }
 
 function updateVoiceModeUI() {
