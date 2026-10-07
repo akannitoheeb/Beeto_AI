@@ -2166,7 +2166,9 @@ async function getAuthHeaders() {
 // ================================================================
 // SERVER-SIDE DATA — sessions + settings, only for logged-in users
 // ================================================================
+let userDataLoaded = false;
 async function loadUserData() {
+  userDataLoaded = false;
   try {
     const { data: { user } } = await supabaseClient.auth.getUser();
     const { data, error } = await supabaseClient
@@ -2190,6 +2192,7 @@ async function loadUserData() {
     settings.onboarded = settings.onboarded === undefined ? false : settings.onboarded;
     settings.region = settings.region || "us";
     settings.voiceURI = settings.voiceURI || "";
+    userDataLoaded = true;
   } catch (error) {
     console.error("Failed to load data:", error);
     sessions = [];
@@ -2251,6 +2254,7 @@ function applyProStatusToUI(isActivePro) {
 
 async function saveUserData() {
   if (isGuest || isPrivateMode) return; // nothing to persist for a guest or private session
+  if (!userDataLoaded) return; // never overwrite saved chats if they failed to load
 
   try {
     const { data: { user } } = await supabaseClient.auth.getUser();
