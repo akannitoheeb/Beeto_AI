@@ -108,7 +108,7 @@
       var still = window.matchMedia && matchMedia("(prefers-reduced-motion:reduce)").matches;
       var s = document.createElement("section");
       s.id = "demo";
-      s.innerHTML = '<div class="wrap"><h2>See it in 15 seconds.</h2><p class="sub">From a plain-words request to a checked, send-ready email.</p>' +
+      s.innerHTML = '<div class="wrap"><h2>See Beeto in action.</h2><p class="sub">From a plain-words request to a checked, send-ready email.</p>' +
         '<div class="frame" style="max-width:900px"><div class="bar"><i></i><i></i><i></i></div>' +
         '<video src="' + SRC + '" ' + (still ? '' : 'autoplay ') + 'muted loop playsinline controls preload="metadata" style="display:block;width:100%;height:auto" aria-label="Screen recording of Beeto writing and checking an email sequence"></video></div></div>';
       how.parentNode.insertBefore(s, how.nextSibling);
